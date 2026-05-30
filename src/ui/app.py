@@ -1,5 +1,5 @@
 """
-[P3] UI Streamlit — "Dossier d'enquête" (Paper Detective + Tinder swipe).
+[P3] UI Streamlit — "Dossier d'enquête" (file de triage pro).
 
 Lancement :
     python -m streamlit run src/ui/app.py
@@ -18,30 +18,26 @@ from src.ui.case_card import render_case_card
 
 def main() -> None:
     st.set_page_config(
-        page_title="Fraud Hunter — Dossier d'enquête",
-        page_icon="🔍",  # Temporaire — à remplacer par favicon SVG en fin de projet
+        page_title="Fraud Hunter",
         layout="centered",
         initial_sidebar_state="collapsed",
     )
 
-    # Page background (paper texture) — appliqué au body Streamlit
+    # Style global de l'app (fond clair, header pro)
     st.markdown(
         """
         <style>
-        @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
-        /* Fond bureau sombre — fait ressortir la chemise manille */
+        /* Fond clair neutre */
         .stApp {
-            background-color: #1F1B17;
-            background-image:
-                radial-gradient(ellipse at center top, #3A332A 0%, #1F1B17 65%);
+            background: #F2F4F7;
         }
 
-        /* Réduit le padding du conteneur principal pour centrer la carte */
         .block-container {
-            padding-top: 2rem;
+            padding-top: 2.5rem;
             padding-bottom: 2rem;
-            max-width: 760px;
+            max-width: 640px;
         }
 
         /* Cache le menu burger et footer Streamlit pour démo */
@@ -51,16 +47,23 @@ def main() -> None:
         unsafe_allow_html=True,
     )
 
-    # En-tête de page (titre app) — léger, sur fond sombre
+    # En-tête de page (titre app) — sobre, sur fond clair
     st.markdown(
         """
-        <div style="font-family: 'Space Mono', monospace; text-align: center; margin-bottom: 1.5rem;">
-            <div style="font-size: 11px; letter-spacing: 0.3em; color: #C4A77D;">
-                ▒░▒░ FRAUD HUNTER ░▒░▒
+        <div style="font-family: 'Inter', sans-serif; margin-bottom: 1.25rem;
+                    display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="width: 28px; height: 28px; border-radius: 7px;
+                            background: #101828; display: flex; align-items: center;
+                            justify-content: center;">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none"
+                         stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"
+                         stroke-linejoin="round"><circle cx="11" cy="11" r="8"/>
+                         <path d="m21 21-4.3-4.3"/></svg>
+                </div>
+                <span style="font-size: 16px; font-weight: 600; color: #101828;">Fraud Hunter</span>
             </div>
-            <div style="font-size: 10px; letter-spacing: 0.2em; color: #6B5D3F; margin-top: 4px;">
-                BUREAU D'ENQUÊTE — TRUST &amp; SAFETY
-            </div>
+            <span style="font-size: 12px; color: #98A2B3;">Trust &amp; Safety · File de révision</span>
         </div>
         """,
         unsafe_allow_html=True,
@@ -68,7 +71,7 @@ def main() -> None:
 
     # Carte dossier (mockée pour l'instant)
     card_html = render_case_card(MOCK_CASE)
-    components.html(card_html, height=1100, scrolling=False)
+    components.html(card_html, height=1000, scrolling=False)
 
 
 if __name__ == "__main__":
