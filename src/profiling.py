@@ -74,7 +74,16 @@ def build_ip_profiles(df: pd.DataFrame) -> dict:
 
     TODO P1 : implémenter.
     """
-    raise NotImplementedError
+
+    df_ip = df.dropna(subset=['ip_address'])
+
+    ip_grouped = df_ip.groupby('ip_address').agg(
+        nombre_cartes_distinctes=('card_id','nunique'),
+        nombre_total_transactions = ('transaction_id','count')
+    ).reset_index()
+
+    ip_profiles = ip_grouped.set_index('ip_address').to_dict(orient='index')
+    return ip_profiles
 
 
 def build_merchant_profiles(df: pd.DataFrame) -> dict:
@@ -84,4 +93,14 @@ def build_merchant_profiles(df: pd.DataFrame) -> dict:
 
     TODO P1 : implémenter si temps disponible.
     """
-    raise NotImplementedError
+
+    merchant_grouped = df.groupby('merchant_name').agg(
+        nombre_cartes_distinctes=('card_id','nunique'),
+        montant_total=('amount', 'sum'),
+        montant_habituel=('amount', 'median'),
+        montant_maximal=('amount', 'max'),
+        nombre_total_transactions=('transaction_id', 'count')
+    ).reset_index()
+
+    merchant_profiles = merchant_grouped.set_index('merchant_name').to_dict(orient='index')
+    return merchant_profiles
