@@ -1,0 +1,113 @@
+You are given a task to integrate an existing React component in the codebase
+
+The codebase should support:
+- shadcn project structure  
+- Tailwind CSS
+- Typescript
+
+If it doesn't, provide instructions on how to setup project via shadcn CLI, install Tailwind or Typescript.
+
+Determine the default path for components and styles. 
+If default path for components is not /components/ui, provide instructions on why it's important to create this folder
+Copy-paste this component to /components/ui folder:
+```tsx
+coss-badge.tsx
+"use client";
+
+import { mergeProps } from "@base-ui/react/merge-props";
+import { useRender } from "@base-ui/react/use-render";
+import { cva, type VariantProps } from "class-variance-authority";
+import { cn } from "@/lib/utils";
+import type React from "react";
+
+export const badgeVariants = cva(
+  "relative inline-flex shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-sm border border-transparent font-medium outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-64 [&_svg:not([class*='opacity-'])]:opacity-80 [&_svg:not([class*='size-'])]:size-3.5 sm:[&_svg:not([class*='size-'])]:size-3 [&_svg]:pointer-events-none [&_svg]:shrink-0 [button&,a&]:cursor-pointer [button&,a&]:pointer-coarse:after:absolute [button&,a&]:pointer-coarse:after:size-full [button&,a&]:pointer-coarse:after:min-h-11 [button&,a&]:pointer-coarse:after:min-w-11",
+  {
+    defaultVariants: {
+      size: "default",
+      variant: "default",
+    },
+    variants: {
+      size: {
+        default:
+          "h-5.5 min-w-5.5 px-[calc(--spacing(1)-1px)] text-sm sm:h-4.5 sm:min-w-4.5 sm:text-xs",
+        lg: "h-6.5 min-w-6.5 px-[calc(--spacing(1.5)-1px)] text-base sm:h-5.5 sm:min-w-5.5 sm:text-sm",
+        sm: "h-5 min-w-5 rounded-[.25rem] px-[calc(--spacing(1)-1px)] text-xs sm:h-4 sm:min-w-4 sm:text-[.625rem]",
+      },
+      variant: {
+        default:
+          "bg-primary text-primary-foreground [button&,a&]:hover:bg-primary/90",
+        destructive:
+          "bg-destructive text-white [button&,a&]:hover:bg-destructive/90",
+        error:
+          "bg-destructive/8 text-destructive-foreground dark:bg-destructive/16",
+        info: "bg-info/8 text-info-foreground dark:bg-info/16",
+        outline:
+          "border-input bg-background text-foreground dark:bg-input/32 [button&,a&]:hover:bg-accent/50 dark:[button&,a&]:hover:bg-input/48",
+        secondary:
+          "bg-secondary text-secondary-foreground [button&,a&]:hover:bg-secondary/90",
+        success: "bg-success/8 text-success-foreground dark:bg-success/16",
+        warning: "bg-warning/8 text-warning-foreground dark:bg-warning/16",
+      },
+    },
+  },
+);
+
+export interface BadgeProps extends useRender.ComponentProps<"span"> {
+  variant?: VariantProps<typeof badgeVariants>["variant"];
+  size?: VariantProps<typeof badgeVariants>["size"];
+}
+
+export function Badge({
+  className,
+  variant,
+  size,
+  render,
+  ...props
+}: BadgeProps): React.ReactElement {
+  const defaultProps = {
+    className: cn(badgeVariants({ className, size, variant })),
+    "data-slot": "badge",
+  };
+
+  return useRender({
+    defaultTagName: "span",
+    props: mergeProps<"span">(defaultProps, props),
+    render,
+  });
+}
+
+
+demo.tsx
+import { Badge } from "@/components/ui/component";
+
+export default function BadgeLarge() {
+  return (
+    <div className="flex items-center justify-center w-full min-h-screen bg-background">
+      <Badge size="lg">Badge</Badge>
+    </div>
+  );
+}
+```
+
+Install NPM dependencies:
+```bash
+@base-ui/react, class-variance-authority
+```
+
+Implementation Guidelines
+ 1. Analyze the component structure and identify all required dependencies
+ 2. Review the component's argumens and state
+ 3. Identify any required context providers or hooks and install them
+ 4. Questions to Ask
+ - What data/props will be passed to this component?
+ - Are there any specific state management requirements?
+ - Are there any required assets (images, icons, etc.)?
+ - What is the expected responsive behavior?
+ - What is the best place to use this component in the app?
+
+Steps to integrate
+ 0. Copy paste all the code above in the correct directories
+ 1. Install external dependencies
+ 2. Fill image assets with Unsplash stock images you know exist
+ 3. Use lucide-react icons for svgs or logos if component requires them

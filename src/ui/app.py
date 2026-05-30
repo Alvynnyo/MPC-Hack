@@ -30,10 +30,11 @@ def main() -> None:
         <style>
         @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap');
 
-        /* Fond papier sur toute l'app */
+        /* Fond bureau sombre — fait ressortir la chemise manille */
         .stApp {
-            background-color: #FDFBF7;
-            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' /%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.12'/%3E%3C/svg%3E");
+            background-color: #1F1B17;
+            background-image:
+                radial-gradient(ellipse at center top, #3A332A 0%, #1F1B17 65%);
         }
 
         /* Réduit le padding du conteneur principal pour centrer la carte */
@@ -50,15 +51,15 @@ def main() -> None:
         unsafe_allow_html=True,
     )
 
-    # En-tête de page (titre app)
+    # En-tête de page (titre app) — léger, sur fond sombre
     st.markdown(
         """
         <div style="font-family: 'Space Mono', monospace; text-align: center; margin-bottom: 1.5rem;">
-            <div style="font-size: 11px; letter-spacing: 0.2em; color: #4A4A4A;">
+            <div style="font-size: 11px; letter-spacing: 0.3em; color: #C4A77D;">
                 ▒░▒░ FRAUD HUNTER ░▒░▒
             </div>
-            <div style="font-size: 11px; letter-spacing: 0.1em; color: #C4A77D; margin-top: 4px;">
-                Trust &amp; Safety — Bureau d'enquête
+            <div style="font-size: 10px; letter-spacing: 0.2em; color: #6B5D3F; margin-top: 4px;">
+                BUREAU D'ENQUÊTE — TRUST &amp; SAFETY
             </div>
         </div>
         """,
@@ -67,7 +68,7 @@ def main() -> None:
 
     # Carte dossier (mockée pour l'instant)
     card_html = render_case_card(MOCK_CASE)
-    components.html(card_html, height=860, scrolling=False)
+    components.html(card_html, height=1100, scrolling=False)
 
 
 if __name__ == "__main__":
