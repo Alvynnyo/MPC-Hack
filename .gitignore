@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+env/
+
+# Streamlit
+.streamlit/secrets.toml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets / API keys
+.env
+*.key
+
+# Audit logs (générés à l'exécution)
+audit_log.json
+
+# Outputs (sauf le CSV final attendu en livrable)
+*.tmp
+*.log
