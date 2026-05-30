@@ -15,23 +15,57 @@ import pandas as pd
 
 
 def build_card_profiles(df: pd.DataFrame) -> dict:
-    """
-    Pour chaque card_id : count, mean, median, max, pays habituel,
-    catégories fréquentes, canaux, devices vus, IPs vues.
+    """Retourne un profil par carte basé sur les montants, pays, catégories et canaux."""
+    profiles: dict = {}
 
-    TODO P1 : implémenter.
-    """
-    raise NotImplementedError
+    for card_id, group in df.groupby("card_id"):
+        amount = group["amount"]
+        mean_amount = round(float(amount.mean()), 2)
+        median_amount = float(amount.median())
+        max_amount = float(amount.max())
+        iqr_amount = float(amount.quantile(0.75) - amount.quantile(0.25))
+
+        country_mode = group["merchant_country"].mode()
+        usual_country = country_mode.iloc[0] if not country_mode.empty else None
+
+        top_categories = group["merchant_category"].value_counts().head(3).index.tolist()
+        channel_counts = group["channel"].value_counts().to_dict()
+        channels = {str(k): int(v) for k, v in channel_counts.items()}
+
+        known_devices = group["device_id"].dropna().unique().tolist()
+        known_ips = group["ip_address"].dropna().unique().tolist()
+
+        profiles[card_id] = {
+            "count": int(len(group)),
+            "mean_amount": mean_amount,
+            "median_amount": median_amount,
+            "max_amount": max_amount,
+            "iqr_amount": iqr_amount,
+            "usual_country": usual_country,
+            "top_categories": top_categories,
+            "channels": channels,
+            "known_devices": known_devices,
+            "known_ips": known_ips,
+        }
+
+    return profiles
 
 
 def build_device_profiles(df: pd.DataFrame) -> dict:
-    """
-    Pour chaque device_id : nombre de cartes distinctes, total transactions,
-    montant total.
+    """Retourne un profil par device avec cartes distinctes, transactions et montant total."""
+    profiles: dict = {}
+    device_df = df[df["device_id"].notna()]
 
-    TODO P1 : implémenter.
-    """
-    raise NotImplementedError
+    for device_id, group in device_df.groupby("device_id"):
+        card_list = group["card_id"].dropna().unique().tolist()
+        profiles[device_id] = {
+            "distinct_cards": int(group["card_id"].nunique()),
+            "total_transactions": int(len(group)),
+            "total_amount": round(float(group["amount"].sum()), 2),
+            "card_list": card_list,
+        }
+
+    return profiles
 
 
 def build_ip_profiles(df: pd.DataFrame) -> dict:
