@@ -72,11 +72,17 @@ Chaque transaction est passée à travers 4 couches indépendantes. Chacune cibl
 
 **Indicateur :** `amount > N × médiane(card_id)`, avec N à calibrer (5–15).
 
-### Couche 2 — Vitesse impossible
+### Couche 2 — Burst temporel (loi de Poisson)
 
-**Ce qu'elle cherche :** une carte utilisée physiquement dans deux pays différents dans un laps de temps trop court pour un être humain.
+**Ce qu'elle cherche :** un rythme de transactions statistiquement improbable, soit chez un marchand précis (terminal compromis, skimmer), soit sur une carte précise (card testing).
 
-**Indicateur :** deux transactions consécutives avec le même `card_id`, `channel = in_person`, où `merchant_country` change en moins de quelques heures.
+**Deux sous-signaux combinés en un seul score s2 :**
+- **Burst marchand :** λ = taux normal de transactions chez ce marchand par heure sur l'historique du mois. On observe k transactions dans une fenêtre glissante de 2 heures. Si P(X ≥ k) < 0.01, burst suspect.
+- **Burst carte :** λ = taux normal de transactions pour cette carte par heure. On observe k transactions en 30 minutes pour cette carte. Si P(X ≥ k) < 0.01, card testing détecté.
+
+**Formule :** P(X ≥ k) = 1 − CDF_Poisson(k−1, λ). Score normalisé : min(1, −log10(p_value) / 8). On prend le maximum des deux sous-signaux comme score final de la couche.
+
+**Exemples concrets dans le dataset :** burst QuickPay du 05-05 (6 cartes en 72 minutes), burst QuickPay du 05-17 (7 cartes en 71 minutes), card testing sur card_023 (3 micro-transactions en 13 minutes), card testing sur card_049 (4 micro-transactions en 12 minutes).
 
 ### Couche 3 — Siphonnement rapide
 
