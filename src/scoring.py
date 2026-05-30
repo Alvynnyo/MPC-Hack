@@ -1,6 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 import pandas as pd
+from src.feedback import FeedbackManager
 
 @dataclass
 class Weights:
@@ -34,31 +35,40 @@ def flag_transactions(scores: pd.Series, threshold: float = 0.5) -> pd.Series:
     """
     return scores >= threshold
 
-# --- AJOUT CRUCIAL : La fonction manquante ---
 def process_scoring_pipeline(
     df: pd.DataFrame, 
     weights: Weights, 
-    threshold: float = 0.5
+    threshold: float = 0.5,
+    feedback_manager: FeedbackManager = None  
 ) -> pd.DataFrame:
     """
     Fonction principale à appeler depuis l'UI ou l'API.
     Prend le DataFrame brut avec les colonnes de détection, ajoute le score final,
     et filtre pour ne garder que la file d'attente des transactions suspectes.
     """
+
     result_df = df.copy()
     
-    # On assume que P1 a nommé ses colonnes 's1', 's2', 's3', 's4'
+    # 1. Calcul du score de base
     result_df['final_score'] = compute_fraud_scores(
-        s1=result_df['s1'],
-        s2=result_df['s2'],
-        s3=result_df['s3'],
-        s4=result_df['s4'],
+        s1=result_df['s1'], s2=result_df['s2'], 
+        s3=result_df['s3'], s4=result_df['s4'], 
         weights=weights
     )
     
-    result_df['is_flagged'] = flag_transactions(result_df['final_score'], threshold)
+    # 2. Application du Feedback Loop 
+    if feedback_manager:
+        for cat, mod in feedback_manager.category_modifiers.items():
+            if 'merchant_category' in result_df.columns:
+                result_df.loc[result_df['merchant_category'] == cat, 'final_score'] += mod
+                
+        for dev, mod in feedback_manager.device_modifiers.items():
+            if 'device_id' in result_df.columns:
+                result_df.loc[result_df['device_id'] == dev, 'final_score'] += mod
+                
+        result_df['final_score'] = result_df['final_score'].clip(0.0, 1.0)
     
-    # Préparer la file d'attente pour le réviseur
+    result_df['is_flagged'] = flag_transactions(result_df['final_score'], threshold)
     queue_df = result_df[result_df['is_flagged']].sort_values(by='final_score', ascending=False)
     
     return queue_df
