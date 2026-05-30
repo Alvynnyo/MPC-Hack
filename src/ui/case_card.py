@@ -54,20 +54,26 @@ _ICON_ARROW_UP = (
 # --- Helpers d'affichage --------------------------------------------------- #
 
 def _severity_tokens(severity: str) -> dict:
-    """Couleurs (bg, fg, border) pour un niveau de sévérité — palette sobre."""
+    """Couleurs (bg, fg, border) pour un niveau de sévérité — palette sobre.
+
+    critical → bleu sombre · warning → jaune clair · info → vert.
+    """
     return {
-        "critical": {"bg": "#FEF2F2", "fg": "#B42318", "border": "#FECDCA", "icon": _ICON_CRITICAL},
-        "warning":  {"bg": "#FFFAEB", "fg": "#B54708", "border": "#FEDF89", "icon": _ICON_WARNING},
+        "critical": {"bg": "#EFF4FF", "fg": "#1E3A8A", "border": "#C7D7FE", "icon": _ICON_CRITICAL},
+        "warning":  {"bg": "#FEFCE8", "fg": "#854D0E", "border": "#FDE68A", "icon": _ICON_WARNING},
         "info":     {"bg": "#ECFDF3", "fg": "#067647", "border": "#ABEFC6", "icon": _ICON_INFO},
     }.get(severity, {"bg": "#F2F4F7", "fg": "#475467", "border": "#E4E7EC", "icon": _ICON_INFO})
 
 
 def _risk_tokens(score: float) -> dict:
-    """Couleur de la jauge + pill de risque selon le score."""
+    """Couleur de la jauge + pill de risque selon le score.
+
+    élevé → bleu sombre · moyen → jaune clair · faible → vert.
+    """
     if score >= 0.75:
-        return {"bg": "#FEF2F2", "fg": "#B42318", "border": "#FECDCA", "bar": "#D92D20"}
+        return {"bg": "#EFF4FF", "fg": "#1E3A8A", "border": "#C7D7FE", "bar": "#1E40AF"}
     if score >= 0.45:
-        return {"bg": "#FFFAEB", "fg": "#B54708", "border": "#FEDF89", "bar": "#F79009"}
+        return {"bg": "#FEFCE8", "fg": "#854D0E", "border": "#FDE68A", "bar": "#CA8A04"}
     return {"bg": "#ECFDF3", "fg": "#067647", "border": "#ABEFC6", "bar": "#17B26A"}
 
 
@@ -92,8 +98,8 @@ def _render_evidence(items: list[Evidence]) -> str:
 
 def _render_previous(items: list[PreviousTx]) -> str:
     status_tokens = {
-        "current": ("#B42318", "current", "is-current"),
-        "suspect": ("#B54708", "suspect", ""),
+        "current": ("#1E3A8A", "current", "is-current"),
+        "suspect": ("#854D0E", "suspect", ""),
         "ok":      ("#667085", "ok", ""),
     }
     rows = []
@@ -300,7 +306,7 @@ body {{
   position: relative;
   background: #F9FAFB;
   border: 1px solid var(--c-border);
-  border-left: 3px solid #344054;
+  border-left: 3px solid #1E40AF;
   border-radius: 8px;
   padding: 14px 16px;
   margin-bottom: 22px;
@@ -371,8 +377,8 @@ body {{
 }}
 .tx-row:last-child {{ border-bottom: none; }}
 .tx-row.is-current {{
-  background: #FEF2F2;
-  box-shadow: inset 3px 0 0 #D92D20;
+  background: #EFF4FF;
+  box-shadow: inset 3px 0 0 #1E40AF;
 }}
 
 .tx-date {{ font-family: var(--font-mono); font-size: 12px; color: var(--c-text-3); }}
@@ -424,13 +430,13 @@ body {{
 }}
 .btn svg {{ width: 15px; height: 15px; }}
 .btn:hover {{ box-shadow: 0 1px 2px rgba(16,24,40,0.06); }}
-.btn:focus-visible {{ outline: 2px solid #344054; outline-offset: 2px; }}
+.btn:focus-visible {{ outline: 2px solid #1E40AF; outline-offset: 2px; }}
 
-.btn-fraud {{ border-color: #FECDCA; color: #B42318; background: #FFFBFA; }}
-.btn-fraud:hover {{ background: #FEF2F2; border-color: #FDA29B; }}
+.btn-fraud {{ border-color: #C7D7FE; color: #1E3A8A; background: #FBFCFF; }}
+.btn-fraud:hover {{ background: #EFF4FF; border-color: #A4BCFD; }}
 
-.btn-escalate {{ border-color: #FEDF89; color: #B54708; background: #FFFCF5; }}
-.btn-escalate:hover {{ background: #FFFAEB; border-color: #FEC84B; }}
+.btn-escalate {{ border-color: #FDE68A; color: #854D0E; background: #FFFEF7; }}
+.btn-escalate:hover {{ background: #FEFCE8; border-color: #FDE047; }}
 
 .btn-innocent {{ border-color: #ABEFC6; color: #067647; background: #FBFEFC; }}
 .btn-innocent:hover {{ background: #ECFDF3; border-color: #75E0A7; }}
