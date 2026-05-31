@@ -20,6 +20,16 @@ from src.ui.case_card import CARD_CSS, render_card_inner, render_controls
 from src.ui.mock_data import CaseFile
 
 
+def _risk_key(label: str) -> str:
+    """Normalise un risk_label ("ÉLEVÉ"/"MOYEN"/"FAIBLE") en clé ascii."""
+    lab = (label or "").upper()
+    if "LEV" in lab:   # ÉLEVÉ / ELEVE
+        return "eleve"
+    if "MOY" in lab:   # MOYEN
+        return "moyen"
+    return "faible"
+
+
 DECK_CSS = """
 body { padding: 18px 16px 28px; }
 .deck-wrap {
@@ -93,6 +103,49 @@ body { padding: 18px 16px 28px; }
 .done-stat .n { font-family: var(--font-mono); font-size: 24px; font-weight: 600; }
 .done-stat .k { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--c-text-3); margin-top: 4px; }
 .done-actions { display: flex; gap: 10px; justify-content: center; }
+
+/* Sélecteur de vue (segmented control) */
+.view-toggle {
+  display: inline-flex; background: #EAECF0; border-radius: 10px;
+  padding: 3px; margin-bottom: 14px;
+}
+.seg {
+  border: none; background: transparent; cursor: pointer;
+  font-family: var(--font-sans); font-size: 13px; font-weight: 600;
+  color: var(--c-text-2); padding: 7px 16px; border-radius: 8px;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+.seg.active {
+  background: var(--c-surface); color: var(--c-text);
+  box-shadow: 0 1px 2px rgba(16,24,40,0.08);
+}
+
+/* Tableau de bord */
+.dashboard {
+  width: 100%; background: var(--c-surface); border: 1px solid var(--c-border);
+  border-radius: 16px; padding: 22px 24px;
+  box-shadow: 0 1px 2px rgba(16,24,40,0.04), 0 20px 32px -12px rgba(16,24,40,0.10);
+}
+.dash-progress { margin-bottom: 24px; }
+.dash-progress-head { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 10px; }
+.dash-progress-head .t { font-weight: 600; color: var(--c-text-2); }
+.dash-progress-head .c { font-family: var(--font-mono); color: var(--c-text-3); }
+.dash-section { margin-bottom: 24px; }
+.dash-section:last-child { margin-bottom: 0; }
+.dash-title {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--c-text-3); margin-bottom: 16px;
+}
+.dash-row {
+  display: grid; grid-template-columns: 12px 80px 1fr 32px; gap: 12px;
+  align-items: center; margin-bottom: 14px;
+}
+.dash-row:last-child { margin-bottom: 0; }
+.dash-dot { width: 10px; height: 10px; border-radius: 50%; }
+.dash-label { font-size: 13px; color: var(--c-text); }
+.dash-bar-track { display: block; width: 100%; height: 8px; border-radius: 999px; background: #EAECF0; overflow: hidden; }
+.dash-bar-fill { display: block; height: 8px; border-radius: 999px; width: 0%; transition: width 280ms ease; }
+.dash-count { font-family: var(--font-mono); font-size: 14px; font-weight: 600; text-align: right; color: var(--c-text); }
 """
 
 
@@ -169,7 +222,61 @@ DECK_JS = r"""
     }
     const undoBtn = document.getElementById('undoBtn');
     if (undoBtn) undoBtn.disabled = history.length === 0;
+    renderDashboard();
   }
+
+  // --- Tableau de bord ---
+  let currentView = 'deck';
+
+  function renderDashboard() {
+    const rem = { eleve: 0, moyen: 0, faible: 0 };
+    for (let i = cur; i < total; i++) {
+      const k = cards[i].getAttribute('data-risk') || 'faible';
+      if (rem[k] != null) rem[k] += 1;
+    }
+    const res = { fraud: 0, escalate: 0, legit: 0 };
+    for (let i = 0; i < cur; i++) {
+      const d = decisions[i];
+      if (res[d] != null) res[d] += 1;
+    }
+    const setRow = (cntId, barId, n) => {
+      const c = document.getElementById(cntId);
+      const b = document.getElementById(barId);
+      if (c) c.textContent = n;
+      if (b) b.style.width = (total ? (n / total * 100) : 0) + '%';
+    };
+    setRow('cntRemEleve', 'barRemEleve', rem.eleve);
+    setRow('cntRemMoyen', 'barRemMoyen', rem.moyen);
+    setRow('cntRemFaible', 'barRemFaible', rem.faible);
+    setRow('cntResFraud', 'barResFraud', res.fraud);
+    setRow('cntResEscalate', 'barResEscalate', res.escalate);
+    setRow('cntResLegit', 'barResLegit', res.legit);
+    const dc = document.getElementById('dashCount');
+    if (dc) dc.textContent = cur + ' / ' + total;
+    const df = document.getElementById('dashFill');
+    if (df) df.style.width = (total ? (cur / total * 100) : 0) + '%';
+  }
+
+  function setView(v) {
+    currentView = v;
+    const deckView = document.getElementById('deckView');
+    const dash = document.getElementById('dashboard');
+    if (v === 'dashboard') {
+      if (deckView) deckView.style.display = 'none';
+      if (dash) dash.hidden = false;
+      renderDashboard();
+    } else {
+      if (deckView) deckView.style.display = '';
+      if (dash) dash.hidden = true;
+    }
+    document.querySelectorAll('.seg').forEach(s => {
+      s.classList.toggle('active', s.getAttribute('data-view') === v);
+    });
+  }
+
+  document.querySelectorAll('.seg').forEach(s => {
+    s.addEventListener('click', () => setView(s.getAttribute('data-view')));
+  });
 
   function applyDrag(card, dx, dy) {
     const rot = dx * 0.04;
@@ -300,6 +407,7 @@ DECK_JS = r"""
 
   // --- Clavier ---
   document.addEventListener('keydown', (e) => {
+    if (currentView !== 'deck') return;  // pas de décision depuis le dashboard
     const k = e.key.toLowerCase();
     if (k === 'a' || e.key === 'ArrowLeft') { e.preventDefault(); flyOff('fraud'); }
     else if (k === 'd' || e.key === 'ArrowRight') { e.preventDefault(); flyOff('legit'); }
@@ -395,7 +503,7 @@ def render_swipe_deck(cases: list[CaseFile]) -> str:
 
     cards_html = "\n".join(
         f"""
-        <div class="swipe-card" data-index="{i}" data-id="{case.case_id}">
+        <div class="swipe-card" data-index="{i}" data-id="{case.case_id}" data-risk="{_risk_key(case.risk_label)}">
           {render_card_inner(case)}
           <div class="tint"></div>
           <div class="decision-label"></div>
@@ -412,31 +520,94 @@ def render_swipe_deck(cases: list[CaseFile]) -> str:
 <body>
   <div class="deck-wrap">
 
-    <div class="stage" id="stage">
-      {cards_html}
+    <div class="view-toggle">
+      <button class="seg active" type="button" data-view="deck">Révision</button>
+      <button class="seg" type="button" data-view="dashboard">Tableau de bord</button>
     </div>
 
-    <div class="deck-controls" id="deckControls">
-      <div class="deck-progress">
-        <span class="label" id="progressLabel">Dossier 1</span>
-        <span class="count" id="progressCount">0 / {len(cases)}</span>
+    <div id="deckView">
+
+      <div class="stage" id="stage">
+        {cards_html}
       </div>
-      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
-      {controls}
-      <button id="undoBtn" class="btn btn-undo" type="button" disabled>Annuler la dernière décision (Z)</button>
+
+      <div class="deck-controls" id="deckControls">
+        <div class="deck-progress">
+          <span class="label" id="progressLabel">Dossier 1</span>
+          <span class="count" id="progressCount">0 / {len(cases)}</span>
+        </div>
+        <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+        {controls}
+        <button id="undoBtn" class="btn btn-undo" type="button" disabled>Annuler la dernière décision (Z)</button>
+      </div>
+
+      <div class="deck-done" id="deckDone" hidden>
+        <h2>File terminée</h2>
+        <p>Toutes les décisions ont été enregistrées.</p>
+        <div class="done-stats">
+          <div class="done-stat"><div class="n" id="nFraud" style="color:#1E40AF;">0</div><div class="k">Fraude</div></div>
+          <div class="done-stat"><div class="n" id="nEscalate" style="color:#CA8A04;">0</div><div class="k">Escaladé</div></div>
+          <div class="done-stat"><div class="n" id="nLegit" style="color:#17B26A;">0</div><div class="k">Légitime</div></div>
+        </div>
+        <div class="done-actions">
+          <button id="downloadBtn" class="btn btn-fraud" type="button">Exporter CSV</button>
+          <button id="restartBtn" class="btn" type="button">Recommencer</button>
+        </div>
+      </div>
+
     </div>
 
-    <div class="deck-done" id="deckDone" hidden>
-      <h2>File terminée</h2>
-      <p>Toutes les décisions ont été enregistrées.</p>
-      <div class="done-stats">
-        <div class="done-stat"><div class="n" id="nFraud" style="color:#1E40AF;">0</div><div class="k">Fraude</div></div>
-        <div class="done-stat"><div class="n" id="nEscalate" style="color:#CA8A04;">0</div><div class="k">Escaladé</div></div>
-        <div class="done-stat"><div class="n" id="nLegit" style="color:#17B26A;">0</div><div class="k">Légitime</div></div>
+    <div class="dashboard" id="dashboard" hidden>
+      <div class="dash-progress">
+        <div class="dash-progress-head">
+          <span class="t">Progression globale</span>
+          <span class="c" id="dashCount">0 / {len(cases)}</span>
+        </div>
+        <div class="progress-track"><div class="progress-fill" id="dashFill"></div></div>
       </div>
-      <div class="done-actions">
-        <button id="downloadBtn" class="btn btn-fraud" type="button">Exporter CSV</button>
-        <button id="restartBtn" class="btn" type="button">Recommencer</button>
+
+      <div class="dash-section">
+        <p class="dash-title">À traiter — par importance</p>
+        <div class="dash-row">
+          <span class="dash-dot" style="background:#1E40AF;"></span>
+          <span class="dash-label">Élevé</span>
+          <span class="dash-bar-track"><span class="dash-bar-fill" id="barRemEleve" style="background:#1E40AF;"></span></span>
+          <span class="dash-count" id="cntRemEleve">0</span>
+        </div>
+        <div class="dash-row">
+          <span class="dash-dot" style="background:#CA8A04;"></span>
+          <span class="dash-label">Moyen</span>
+          <span class="dash-bar-track"><span class="dash-bar-fill" id="barRemMoyen" style="background:#CA8A04;"></span></span>
+          <span class="dash-count" id="cntRemMoyen">0</span>
+        </div>
+        <div class="dash-row">
+          <span class="dash-dot" style="background:#17B26A;"></span>
+          <span class="dash-label">Faible</span>
+          <span class="dash-bar-track"><span class="dash-bar-fill" id="barRemFaible" style="background:#17B26A;"></span></span>
+          <span class="dash-count" id="cntRemFaible">0</span>
+        </div>
+      </div>
+
+      <div class="dash-section">
+        <p class="dash-title">Traités — par décision</p>
+        <div class="dash-row">
+          <span class="dash-dot" style="background:#1E40AF;"></span>
+          <span class="dash-label">Fraude</span>
+          <span class="dash-bar-track"><span class="dash-bar-fill" id="barResFraud" style="background:#1E40AF;"></span></span>
+          <span class="dash-count" id="cntResFraud">0</span>
+        </div>
+        <div class="dash-row">
+          <span class="dash-dot" style="background:#CA8A04;"></span>
+          <span class="dash-label">Escaladé</span>
+          <span class="dash-bar-track"><span class="dash-bar-fill" id="barResEscalate" style="background:#CA8A04;"></span></span>
+          <span class="dash-count" id="cntResEscalate">0</span>
+        </div>
+        <div class="dash-row">
+          <span class="dash-dot" style="background:#17B26A;"></span>
+          <span class="dash-label">Légitime</span>
+          <span class="dash-bar-track"><span class="dash-bar-fill" id="barResLegit" style="background:#17B26A;"></span></span>
+          <span class="dash-count" id="cntResLegit">0</span>
+        </div>
       </div>
     </div>
 

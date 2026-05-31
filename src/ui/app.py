@@ -95,7 +95,7 @@ def main() -> None:
         return
 
     deck_html = render_swipe_deck(cases_queue)
-    components.html(deck_html, height=1160, scrolling=False)   
+    components.html(deck_html, height=1220, scrolling=False)
 
 if __name__ == "__main__":
     main()
