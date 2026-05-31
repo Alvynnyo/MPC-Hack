@@ -550,16 +550,28 @@ DECK_JS = r"""
     controlsEl.style.display = '';
   }
 
-  // Export CSV des décisions
-  document.getElementById('downloadBtn').addEventListener('click', () => {
-    let csv = 'case_id,decision\n';
+  // Construit le rapport structuré des décisions (payload pour audit.py / FeedbackManager)
+  function buildPayload() {
+    const out = [];
     cards.forEach((c, i) => {
-      csv += c.getAttribute('data-id') + ',' + (decisions[i] || '') + '\n';
+      out.push({
+        case_id: c.getAttribute('data-id'),
+        card_id: c.getAttribute('data-card'),
+        score: parseFloat(c.getAttribute('data-score')),
+        category: c.getAttribute('data-category') || '',
+        decision: decisions[i] || null,
+      });
     });
-    const blob = new Blob([csv], { type: 'text/csv' });
+    return out;
+  }
+
+  // Export JSON des décisions (reçu / piste d'audit)
+  document.getElementById('downloadBtn').addEventListener('click', () => {
+    const payload = JSON.stringify(buildPayload(), null, 2);
+    const blob = new Blob([payload], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'decisions.csv';
+    a.download = 'decisions.json';
     a.click();
   });
 
@@ -623,7 +635,7 @@ def render_swipe_deck(cases: list[CaseFile]) -> str:
 
     cards_html = "\n".join(
         f"""
-        <div class="swipe-card" data-index="{i}" data-id="{case.case_id}" data-risk="{_risk_key(case.risk_label)}" data-category="{case.merchant_category}">
+        <div class="swipe-card" data-index="{i}" data-id="{case.case_id}" data-card="{case.card_id}" data-score="{case.score:.4f}" data-risk="{_risk_key(case.risk_label)}" data-category="{case.merchant_category}">
           <div class="learned-flag">Catégorie jugée fiable — priorité réduite</div>
           {render_card_inner(case)}
           <div class="tint"></div>
@@ -673,7 +685,7 @@ def render_swipe_deck(cases: list[CaseFile]) -> str:
           <div class="done-stat"><div class="n" id="nLegit" style="color:#17B26A;">0</div><div class="k">Légitime</div></div>
         </div>
         <div class="done-actions">
-          <button id="downloadBtn" class="btn btn-fraud" type="button">Exporter CSV</button>
+          <button id="downloadBtn" class="btn btn-fraud" type="button">Exporter le rapport (JSON)</button>
           <button id="restartBtn" class="btn" type="button">Recommencer</button>
         </div>
       </div>
