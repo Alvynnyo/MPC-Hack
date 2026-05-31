@@ -38,6 +38,7 @@ class CaseFile:
     score: float            # 0..1
     risk_label: str         # "ÉLEVÉ" | "MOYEN" | "FAIBLE"
     verdict: str            # Texte naturel généré par Claude
+    merchant_category: str = ""   # ex. "online_retail" — clé de similarité pour le feedback loop
     evidence: list[Evidence] = field(default_factory=list)
     previous: list[PreviousTx] = field(default_factory=list)
 
@@ -50,6 +51,7 @@ MOCK_CASE = CaseFile(
     amount=890.00,
     score=0.91,
     risk_label="ÉLEVÉ",
+    merchant_category="online_retail",
     verdict=(
         "Cette carte fait habituellement des achats entre 20 $ et 80 $ "
         "dans des restaurants canadiens. Ce soir : 4 micro-transactions "
@@ -89,6 +91,7 @@ MOCK_CASES: list[CaseFile] = [
         amount=1250.00,
         score=0.86,
         risk_label="ÉLEVÉ",
+        merchant_category="electronics",
         verdict=(
             "Le device dev_4b1e a servi à 6 cartes différentes en 2 heures, "
             "dont celle-ci. Aucune de ces cartes n'avait jamais utilisé cet "
@@ -116,6 +119,7 @@ MOCK_CASES: list[CaseFile] = [
         amount=540.00,
         score=0.64,
         risk_label="MOYEN",
+        merchant_category="online_retail",
         verdict=(
             "Achat de 540 $ en électronique alors que cette carte dépense "
             "habituellement moins de 60 $ en épicerie et essence. Le device "
@@ -143,6 +147,7 @@ MOCK_CASES: list[CaseFile] = [
         amount=12.00,
         score=0.79,
         risk_label="ÉLEVÉ",
+        merchant_category="gift_card",
         verdict=(
             "Rafale de 4 achats de cartes-cadeaux en 13 minutes sur cette "
             "carte, montants croissants de 2 $ à 12 $. Comportement de test "
@@ -170,6 +175,7 @@ MOCK_CASES: list[CaseFile] = [
         amount=210.00,
         score=0.52,
         risk_label="MOYEN",
+        merchant_category="travel",
         verdict=(
             "Transaction en ligne depuis une IP située en Allemagne alors "
             "que la carte est canadienne. Le montant reste dans les habitudes "
@@ -197,6 +203,7 @@ MOCK_CASES: list[CaseFile] = [
         amount=6.00,
         score=0.71,
         risk_label="ÉLEVÉ",
+        merchant_category="online_retail",
         verdict=(
             "Trois micro-transactions identiques de 2 $ en moins de 5 minutes "
             "chez un marchand en ligne jamais vu sur cette carte. Montants "

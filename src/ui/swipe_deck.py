@@ -152,6 +152,36 @@ body { padding: 18px 16px 28px; }
 .dash-bar-track { display: block; width: 100%; height: 8px; border-radius: 999px; background: #EAECF0; overflow: hidden; }
 .dash-bar-fill { display: block; height: 8px; border-radius: 999px; width: 0%; transition: width 280ms ease; }
 .dash-count { font-family: var(--font-mono); font-size: 14px; font-weight: 600; text-align: right; color: var(--c-text); }
+
+/* Bannière d'apprentissage (feedback loop) */
+.learn-banner {
+  display: flex; align-items: center; gap: 10px;
+  background: #ECFDF3; border: 1px solid #ABEFC6; border-radius: 10px;
+  padding: 10px 14px; margin-bottom: 12px;
+  font-size: 13px; color: #067647; font-weight: 500;
+  animation: learn-in 280ms ease;
+}
+.learn-banner .lb-icon { flex-shrink: 0; width: 16px; height: 16px; }
+@keyframes learn-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+
+/* Drapeau "appris" sur une carte dépriorisée */
+.learned-flag {
+  display: none;
+  position: absolute; top: 0; left: 0; right: 0; z-index: 5;
+  background: #ECFDF3; border-bottom: 1px solid #ABEFC6;
+  color: #067647; font-size: 11px; font-weight: 600;
+  text-align: center; padding: 6px 10px;
+  border-radius: 16px 16px 0 0;
+}
+.swipe-card.learned-legit .learned-flag { display: block; }
+.swipe-card.learned-legit .card { opacity: 0.82; }
+
+/* Ligne d'apprentissage dans le dashboard */
+.dash-learn {
+  background: #ECFDF3; border: 1px solid #ABEFC6; border-radius: 10px;
+  padding: 10px 14px; margin-bottom: 22px;
+  font-size: 12px; color: #067647; font-weight: 500;
+}
 """
 
 
@@ -164,6 +194,16 @@ DECK_JS = r"""
     escalate: { dx: 0,  dy: -1, text: 'Escalader',color: '#CA8A04', tint: 'rgba(202,138,4,0.16)' },
   };
   const THRESHOLD = 110;
+
+  // Feedback loop : seuil d'innocentements pour juger une catégorie "fiable"
+  const TRUST_LEGIT = 2;
+  const CAT_LABELS = {
+    online_retail: 'Achat en ligne', electronics: 'Électronique',
+    gift_card: 'Carte-cadeau', travel: 'Voyage', restaurant: 'Restaurant',
+    grocery: 'Épicerie', gas: 'Essence', subscription: 'Abonnement',
+    utilities: 'Services', entertainment: 'Divertissement', atm: 'Retrait ATM',
+  };
+  const prettyCat = c => CAT_LABELS[c] || (c || 'inconnue');
 
   const stage = document.getElementById('stage');
   const cards = Array.from(document.querySelectorAll('.swipe-card'));
@@ -230,7 +270,57 @@ DECK_JS = r"""
     }
     const undoBtn = document.getElementById('undoBtn');
     if (undoBtn) undoBtn.disabled = history.length === 0;
+    recomputeLearning();
     renderDashboard();
+  }
+
+  // --- Feedback loop : apprentissage en session ---
+  // Recalculé entièrement depuis l'état (decisions + cur) à chaque changement,
+  // donc automatiquement cohérent avec l'undo.
+  function recomputeLearning() {
+    const legitByCat = {};
+    for (let i = 0; i < cur; i++) {
+      if (decisions[i] === 'legit') {
+        const c = cards[i].getAttribute('data-category') || '';
+        if (c) legitByCat[c] = (legitByCat[c] || 0) + 1;
+      }
+    }
+    const trusted = Object.keys(legitByCat).filter(c => legitByCat[c] >= TRUST_LEGIT);
+
+    // réinitialise puis tague les dossiers à venir (i > cur) des catégories fiables
+    let demoted = 0;
+    for (let i = 0; i < total; i++) cards[i].classList.remove('learned-legit');
+    for (let i = cur + 1; i < total; i++) {
+      const c = cards[i].getAttribute('data-category') || '';
+      if (trusted.indexOf(c) !== -1) {
+        cards[i].classList.add('learned-legit');
+        demoted += 1;
+      }
+    }
+
+    const checkIcon = '<svg class="lb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>';
+    const names = trusted.map(prettyCat).join(', ');
+
+    const banner = document.getElementById('learnBanner');
+    if (banner) {
+      if (trusted.length) {
+        banner.innerHTML = checkIcon + 'Appris : ' + names + ' jugée(s) fiable(s) — '
+          + demoted + ' flag(s) similaire(s) dépriorisé(s).';
+        banner.hidden = false;
+      } else {
+        banner.hidden = true;
+      }
+    }
+    const dl = document.getElementById('dashLearn');
+    if (dl) {
+      if (trusted.length) {
+        dl.textContent = 'Apprentissage actif : ' + names
+          + ' jugée(s) fiable(s) — ' + demoted + ' flag(s) restant(s) dépriorisé(s).';
+        dl.hidden = false;
+      } else {
+        dl.hidden = true;
+      }
+    }
   }
 
   // --- Tableau de bord ---
@@ -533,7 +623,8 @@ def render_swipe_deck(cases: list[CaseFile]) -> str:
 
     cards_html = "\n".join(
         f"""
-        <div class="swipe-card" data-index="{i}" data-id="{case.case_id}" data-risk="{_risk_key(case.risk_label)}">
+        <div class="swipe-card" data-index="{i}" data-id="{case.case_id}" data-risk="{_risk_key(case.risk_label)}" data-category="{case.merchant_category}">
+          <div class="learned-flag">Catégorie jugée fiable — priorité réduite</div>
           {render_card_inner(case)}
           <div class="tint"></div>
           <div class="decision-label"></div>
@@ -556,6 +647,8 @@ def render_swipe_deck(cases: list[CaseFile]) -> str:
     </div>
 
     <div id="deckView">
+
+      <div class="learn-banner" id="learnBanner" hidden></div>
 
       <div class="stage" id="stage">
         {cards_html}
@@ -594,7 +687,9 @@ def render_swipe_deck(cases: list[CaseFile]) -> str:
         <div class="kpi"><div class="kpi-val" id="kpiFraudRate">—</div><div class="kpi-lbl">Taux de fraude</div></div>
         <div class="kpi"><div class="kpi-val" id="kpiAvgTime">—</div><div class="kpi-lbl">Temps moyen</div></div>
       </div>
-      <div class="progress-track" style="margin-bottom: 24px;"><div class="progress-fill" id="dashFill"></div></div>
+      <div class="progress-track" style="margin-bottom: 16px;"><div class="progress-fill" id="dashFill"></div></div>
+
+      <div class="dash-learn" id="dashLearn" hidden></div>
 
       <div class="dash-section">
         <p class="dash-title">À traiter — par importance</p>

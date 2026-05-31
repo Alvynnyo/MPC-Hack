@@ -26,9 +26,15 @@ class CaseFile:
     score: float        # score de risque, 0.0 → 1.0
     risk_label: str     # "ÉLEVÉ" | "MOYEN" | "FAIBLE"
     verdict: str        # explication en langage naturel (Gemini) — 2-4 phrases
+    merchant_category: str = ""   # ex. "online_retail" — clé du feedback loop (voir §4)
     evidence: list[Evidence]      # signaux détectés (voir ci-dessous)
     previous: list[PreviousTx]    # historique récent de la carte
 ```
+
+> **`merchant_category`** alimente la boucle de feedback (§4). Optionnel mais
+> recommandé : sans lui, l'apprentissage en session n'a pas de clé de similarité.
+> Côté `controler.py`, il suffit d'ajouter `merchant_category=str(row['merchant_category'])`
+> à la construction du `CaseFile`.
 
 ```python
 @dataclass
@@ -98,23 +104,33 @@ case_id,decision
 ...
 ```
 
-### Pont vers Python (à faire par P3 en coordination, hors périmètre actuel)
+### Boucle de feedback — partie LIVE (côté client, faite)
 
-Quand on voudra persister côté serveur (audit log, boucle de feedback), la forme
-d'une décision à transmettre à `audit.py` / `feedback.py` sera :
+Implémentée dans `swipe_deck.py`. En session, quand le réviseur **innocente 2
+dossiers d'une même `merchant_category`**, l'UI juge la catégorie « fiable » et
+**dépriorise les flags similaires restants** (drapeau sur la carte + bannière +
+ligne dans le dashboard). Entièrement recalculé depuis l'état → cohérent avec
+l'undo. Aucune dépendance backend.
+
+### Boucle de feedback — partie EXPORT vers Python (à brancher)
+
+Pour que `audit.py` + `FeedbackManager` enregistrent aussi côté serveur, l'UI
+exposera en fin de file la liste des décisions :
 
 ```python
 {
-  "case_id": "0142",
-  "card_id": "card_042",        # repris du CaseFile
+  "case_id": "tx_000998",
+  "card_id": "card_046",        # repris du CaseFile
   "decision": "fraud",          # "fraud" | "escalate" | "legit"
-  "score": 0.91,                # score initial, repris du CaseFile
+  "score": 0.75,                # score initial, repris du CaseFile
+  "category": "online_retail",  # merchant_category
+  "auto": false                 # true si dépriorisé automatiquement par l'apprentissage
 }
 ```
 
-`audit.py` (P4) consigne ces entrées ; `feedback.py` (P2/P4) peut s'en servir
-pour ajuster les seuils en session. Le mécanisme de transport iframe → Streamlit
-n'est **pas encore branché** (voir backlog d'intégration).
+`audit.py` (P4) consigne ces entrées ; `FeedbackManager.record_decision()`
+(P2/P4) peut les rejouer. Le transport iframe → Streamlit reste à brancher
+(composant bidirectionnel ou import du CSV/JSON exporté).
 
 ---
 
