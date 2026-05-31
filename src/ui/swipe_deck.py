@@ -130,6 +130,12 @@ body { padding: 18px 16px 28px; }
 .dash-progress-head { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 10px; }
 .dash-progress-head .t { font-weight: 600; color: var(--c-text-2); }
 .dash-progress-head .c { font-family: var(--font-mono); color: var(--c-text-3); }
+
+/* KPI */
+.kpi-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 18px; }
+.kpi { border: 1px solid var(--c-border); border-radius: 10px; padding: 14px 10px; background: #FCFCFD; text-align: center; }
+.kpi-val { font-family: var(--font-mono); font-size: 22px; font-weight: 600; color: var(--c-text); font-variant-numeric: tabular-nums; }
+.kpi-lbl { font-size: 10px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--c-text-3); margin-top: 5px; }
 .dash-section { margin-bottom: 24px; }
 .dash-section:last-child { margin-bottom: 0; }
 .dash-title {
@@ -172,6 +178,8 @@ DECK_JS = r"""
   const decisions = new Array(total).fill(null);
   const lastDir = new Array(total).fill(null);
   const history = [];
+  let lastActionTime = Date.now();
+  const times = [];   // durée (ms) entre décisions, pour le temps moyen
 
   // Hauteur de la scène = carte la plus haute (+ marge pour la pile derrière)
   function sizeStage() {
@@ -235,9 +243,12 @@ DECK_JS = r"""
       if (rem[k] != null) rem[k] += 1;
     }
     const res = { fraud: 0, escalate: 0, legit: 0 };
+    const resImp = { eleve: 0, moyen: 0, faible: 0 };
     for (let i = 0; i < cur; i++) {
       const d = decisions[i];
       if (res[d] != null) res[d] += 1;
+      const k = cards[i].getAttribute('data-risk') || 'faible';
+      if (resImp[k] != null) resImp[k] += 1;
     }
     const setRow = (cntId, barId, n) => {
       const c = document.getElementById(cntId);
@@ -251,10 +262,23 @@ DECK_JS = r"""
     setRow('cntResFraud', 'barResFraud', res.fraud);
     setRow('cntResEscalate', 'barResEscalate', res.escalate);
     setRow('cntResLegit', 'barResLegit', res.legit);
-    const dc = document.getElementById('dashCount');
-    if (dc) dc.textContent = cur + ' / ' + total;
+    setRow('cntResImpEleve', 'barResImpEleve', resImp.eleve);
+    setRow('cntResImpMoyen', 'barResImpMoyen', resImp.moyen);
+    setRow('cntResImpFaible', 'barResImpFaible', resImp.faible);
+
     const df = document.getElementById('dashFill');
     if (df) df.style.width = (total ? (cur / total * 100) : 0) + '%';
+
+    // KPI
+    const setText = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+    setText('kpiProgress', cur + ' / ' + total);
+    setText('kpiFraudRate', cur ? Math.round(res.fraud / cur * 100) + ' %' : '—');
+    if (times.length) {
+      const avg = times.reduce((a, b) => a + b, 0) / times.length / 1000;
+      setText('kpiAvgTime', avg.toFixed(1) + ' s');
+    } else {
+      setText('kpiAvgTime', '—');
+    }
   }
 
   function setView(v) {
@@ -326,7 +350,9 @@ DECK_JS = r"""
     decisions[cur] = dir;
     lastDir[cur] = dir;
     history.push(cur);
-    const decided = cur;
+    const nowT = Date.now();
+    times.push(nowT - lastActionTime);
+    lastActionTime = nowT;
     cur += 1;
 
     setTimeout(() => {
@@ -340,6 +366,8 @@ DECK_JS = r"""
     if (cur >= total) hideDone();
     const idx = history.pop();
     decisions[idx] = null;
+    if (times.length) times.pop();
+    lastActionTime = Date.now();
     cur = idx;
 
     const card = cards[idx];
@@ -449,6 +477,8 @@ DECK_JS = r"""
     cur = 0;
     decisions.fill(null);
     history.length = 0;
+    times.length = 0;
+    lastActionTime = Date.now();
     hideDone();
     cards.forEach(c => { c.style.transition = 'none'; });
     restack();
@@ -558,13 +588,13 @@ def render_swipe_deck(cases: list[CaseFile]) -> str:
     </div>
 
     <div class="dashboard" id="dashboard" hidden>
-      <div class="dash-progress">
-        <div class="dash-progress-head">
-          <span class="t">Progression globale</span>
-          <span class="c" id="dashCount">0 / {len(cases)}</span>
-        </div>
-        <div class="progress-track"><div class="progress-fill" id="dashFill"></div></div>
+
+      <div class="kpi-row">
+        <div class="kpi"><div class="kpi-val" id="kpiProgress">0 / {len(cases)}</div><div class="kpi-lbl">Traités</div></div>
+        <div class="kpi"><div class="kpi-val" id="kpiFraudRate">—</div><div class="kpi-lbl">Taux de fraude</div></div>
+        <div class="kpi"><div class="kpi-val" id="kpiAvgTime">—</div><div class="kpi-lbl">Temps moyen</div></div>
       </div>
+      <div class="progress-track" style="margin-bottom: 24px;"><div class="progress-fill" id="dashFill"></div></div>
 
       <div class="dash-section">
         <p class="dash-title">À traiter — par importance</p>
@@ -607,6 +637,28 @@ def render_swipe_deck(cases: list[CaseFile]) -> str:
           <span class="dash-label">Légitime</span>
           <span class="dash-bar-track"><span class="dash-bar-fill" id="barResLegit" style="background:#17B26A;"></span></span>
           <span class="dash-count" id="cntResLegit">0</span>
+        </div>
+      </div>
+
+      <div class="dash-section">
+        <p class="dash-title">Traités — par importance</p>
+        <div class="dash-row">
+          <span class="dash-dot" style="background:#1E40AF;"></span>
+          <span class="dash-label">Élevé</span>
+          <span class="dash-bar-track"><span class="dash-bar-fill" id="barResImpEleve" style="background:#1E40AF;"></span></span>
+          <span class="dash-count" id="cntResImpEleve">0</span>
+        </div>
+        <div class="dash-row">
+          <span class="dash-dot" style="background:#CA8A04;"></span>
+          <span class="dash-label">Moyen</span>
+          <span class="dash-bar-track"><span class="dash-bar-fill" id="barResImpMoyen" style="background:#CA8A04;"></span></span>
+          <span class="dash-count" id="cntResImpMoyen">0</span>
+        </div>
+        <div class="dash-row">
+          <span class="dash-dot" style="background:#17B26A;"></span>
+          <span class="dash-label">Faible</span>
+          <span class="dash-bar-track"><span class="dash-bar-fill" id="barResImpFaible" style="background:#17B26A;"></span></span>
+          <span class="dash-count" id="cntResImpFaible">0</span>
         </div>
       </div>
     </div>
