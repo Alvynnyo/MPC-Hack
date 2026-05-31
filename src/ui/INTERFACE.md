@@ -1,0 +1,129 @@
+# Contrat d'interface — UI (P3)
+
+Ce document définit **ce que l'UI consomme** et **ce qu'elle produit**, pour que
+les parties détection/scoring (P1/P2) et glue/audit (P4) puissent s'y brancher
+sans modifier le code de l'UI.
+
+L'UI ne fait **aucun calcul de fraude**. Elle affiche des objets `CaseFile` et
+émet des décisions. Tant que la forme ci-dessous est respectée, l'UI fonctionne.
+
+---
+
+## 1. Ce que l'UI consomme : `CaseFile`
+
+Défini dans `src/ui/mock_data.py`. L'écran de révision attend une **liste de
+`CaseFile`**, déjà filtrée (uniquement les transactions signalées) et triée
+(les plus risquées d'abord, idéalement).
+
+```python
+@dataclass
+class CaseFile:
+    case_id: str        # identifiant du dossier, ex. "0142"
+    case_index: int     # position affichée, ex. 42  (pour "42 / 67")
+    case_total: int     # total de dossiers signalés, ex. 67
+    card_id: str        # ex. "card_042"
+    amount: float       # montant de la transaction (CAD)
+    score: float        # score de risque, 0.0 → 1.0
+    risk_label: str     # "ÉLEVÉ" | "MOYEN" | "FAIBLE"
+    verdict: str        # explication en langage naturel (Gemini) — 2-4 phrases
+    evidence: list[Evidence]      # signaux détectés (voir ci-dessous)
+    previous: list[PreviousTx]    # historique récent de la carte
+```
+
+```python
+@dataclass
+class Evidence:
+    label: str     # ex. "Device", "IP", "Montant", "Vitesse"
+    value: str     # ex. "dev_a3f9c821", "89.234.117.42", "890.00 $"
+    tag: str       # libellé court du badge, ex. "JAMAIS VU", "14× MÉDIANE"
+    severity: str  # "critical" | "warning" | "info"
+
+@dataclass
+class PreviousTx:
+    date: str       # ex. "05-01 02:47"  (format libre, affiché tel quel)
+    merchant: str   # ex. "Amazon.ca"
+    amount: float   # montant (CAD)
+    status: str     # "ok" | "suspect" | "current"
+                    # "current" = la transaction du dossier en cours
+```
+
+### Règles de mapping (côté producteur P1/P2)
+
+- `score` ∈ [0, 1]. La couleur (bleu/jaune/vert) est dérivée automatiquement :
+  `≥ 0.75` élevé (bleu), `≥ 0.45` moyen (jaune), sinon faible (vert).
+- `risk_label` doit être cohérent avec `score` (texte affiché tel quel).
+- `severity` d'un `Evidence` pilote la couleur du badge et de l'icône :
+  - `critical` → bleu (signal fort : device/IP partagé, nouveau device, rafale…)
+  - `warning` → jaune (signal modéré : montant atypique, heure, pays…)
+  - `info` → vert (élément rassurant : device connu, montant normal…)
+- `previous` : mettre **exactement une** entrée à `status="current"`
+  (la transaction analysée) ; les autres en `"ok"` ou `"suspect"`.
+
+### Point d'entrée à fournir (P2/P4)
+
+L'UI importe aujourd'hui `MOCK_CASES`. Pour brancher le vrai pipeline, exposer
+une fonction qui renvoie `list[CaseFile]`, par exemple :
+
+```python
+def load_cases() -> list[CaseFile]:
+    # 1. scoring.process_scoring_pipeline(...) -> queue_df (déjà filtrée/triée)
+    # 2. explanations.precompute_explanations(...) -> {transaction_id: verdict}
+    # 3. mapper chaque ligne en CaseFile (+ Evidence + PreviousTx)
+    ...
+```
+
+Puis dans `src/ui/app.py`, remplacer `MOCK_CASES` par `load_cases()`.
+**Aucun autre changement UI nécessaire.**
+
+---
+
+## 2. Ce que l'UI produit : les décisions
+
+Pour chaque dossier, l'analyste choisit une décision parmi :
+
+| Décision | Valeur émise | Geste / touche |
+|---|---|---|
+| Fraude confirmée | `"fraud"` | swipe gauche / `A` / `←` |
+| À escalader | `"escalate"` | swipe haut / `E` / `↑` |
+| Légitime | `"legit"` | swipe droite / `D` / `→` |
+
+Aujourd'hui, les décisions sont accumulées **côté client** (dans l'iframe) et
+exportables en CSV depuis l'écran de fin :
+
+```csv
+case_id,decision
+0142,fraud
+0143,fraud
+0144,legit
+...
+```
+
+### Pont vers Python (à faire par P3 en coordination, hors périmètre actuel)
+
+Quand on voudra persister côté serveur (audit log, boucle de feedback), la forme
+d'une décision à transmettre à `audit.py` / `feedback.py` sera :
+
+```python
+{
+  "case_id": "0142",
+  "card_id": "card_042",        # repris du CaseFile
+  "decision": "fraud",          # "fraud" | "escalate" | "legit"
+  "score": 0.91,                # score initial, repris du CaseFile
+}
+```
+
+`audit.py` (P4) consigne ces entrées ; `feedback.py` (P2/P4) peut s'en servir
+pour ajuster les seuils en session. Le mécanisme de transport iframe → Streamlit
+n'est **pas encore branché** (voir backlog d'intégration).
+
+---
+
+## 3. Résumé des responsabilités
+
+| Qui | Produit | Consomme |
+|---|---|---|
+| P1 / P2 | `list[CaseFile]` (via `load_cases()`) | — |
+| **P3 (UI)** | décisions (`case_id` → `fraud/escalate/legit`) | `list[CaseFile]` |
+| P4 | audit log, feedback | décisions de l'UI |
+
+Tant que `load_cases()` renvoie des `CaseFile` bien formés, l'UI est plug-and-play.
