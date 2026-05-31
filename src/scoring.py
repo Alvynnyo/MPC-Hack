@@ -38,7 +38,7 @@ def flag_transactions(scores: pd.Series, threshold: float = 0.5) -> pd.Series:
 def process_scoring_pipeline(
     df: pd.DataFrame, 
     weights: Weights, 
-    threshold: float = 0.5,
+    threshold: float = 0.28,
     feedback_manager: FeedbackManager = None  
 ) -> pd.DataFrame:
     """

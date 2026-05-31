@@ -24,26 +24,37 @@ def score_cross_card(
     """
     scores = pd.Series(0.0, index=df.index)
 
-    print(f"[DEBUG] device_profiles sample: {list(device_profiles.items())[:3]}")
+    df_temp = df.copy()
+    df_temp['timestamp'] = pd.to_datetime(df_temp['timestamp'])
+    df_temp = df_temp.sort_values('timestamp')
 
-    for idx, row in df.iterrows():
-        score_device = 0.0
-        score_ip = 0.0
+    card_median = df_temp.groupby('card_id')['amount'].median().to_dict()
 
-        #utilisation de device_profiles
-        device_id = row.get('device_id')
-        if pd.notna(device_id) and device_id in device_profiles:
-            nb_cartes_dev = device_profiles[device_id].get('distinct_cards', 1)
-            score_device = min(1.0, (nb_cartes_dev - 1) / 2)
+    scores = pd.Series(0.0, index=df_temp.index)
 
-        # profil ip
-        ip_addr = row.get('ip_address')
-        if pd.notna(ip_addr) and ip_addr in ip_profiles:
-            nb_cartes_ip = ip_profiles[ip_addr].get('nombre_cartes_distinctes', 1)
-            score_ip = min(1.0, (nb_cartes_ip - 1) / 2)
+    for idx, row in df_temp.iterrows():
+        window_start = row['timestamp'] - pd.Timedelta(hours=2)
+        window_end   = row['timestamp'] + pd.Timedelta(hours=2)
+        mask = (
+            (df_temp['merchant_name'] == row['merchant_name'])
+            & (df_temp['timestamp'] >= window_start)
+            & (df_temp['timestamp'] <= window_end)
+        )
+        distinct_cards = df_temp[mask]['card_id'].nunique()
 
-        final_score = max(score_device, score_ip)
-        scores[idx] = min(final_score, 1.0)
+        if distinct_cards >= 6:
+            score = 0.9
+        elif distinct_cards >= 4:
+            score = 0.7
+        else:
+            score = 0.0
 
-    print(f"[DEBUG layer4] min={scores.min():.3f} max={scores.max():.3f} nonzero={(scores > 0).sum()}")
-    return scores
+        if score > 0:
+            median = card_median.get(row['card_id'], row['amount'])
+            ratio = row['amount'] / median if median > 0 else 1.0
+            if ratio > 3:
+                score += min((ratio - 1) / 20, 0.1)
+
+        scores[idx] = min(score, 1.0)
+
+    return scores.reindex(df.index)
