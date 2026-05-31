@@ -2,7 +2,7 @@
 import pandas as pd
 import pytest
 
-from src.scoring import Weights
+from src.scoring import Weights, compute_fraud_scores, flag_transactions
 
 
 def test_weights_must_sum_to_one():
@@ -16,7 +16,19 @@ def test_weights_invalid_sum_raises():
         w.validate()
 
 
-@pytest.mark.skip(reason="TODO P2 : implémenter compute_fraud_scores puis activer")
 def test_compute_fraud_scores_weighted_sum():
-    """0.25 * 0.8 + 0.25 * 0.4 + 0.25 * 0.0 + 0.25 * 0.0 = 0.3"""
-    pass
+    """0.25*0.8 + 0.25*0.4 + 0.25*0.0 + 0.25*0.0 = 0.3"""
+    w = Weights(w1=0.25, w2=0.25, w3=0.25, w4=0.25)
+    s1 = pd.Series([0.8])
+    s2 = pd.Series([0.4])
+    s3 = pd.Series([0.0])
+    s4 = pd.Series([0.0])
+    scores = compute_fraud_scores(s1, s2, s3, s4, w)
+    assert scores.iloc[0] == pytest.approx(0.3)
+
+
+def test_flag_transactions_threshold():
+    """Le flag est True au-dessus du seuil, False en dessous."""
+    scores = pd.Series([0.1, 0.5, 0.9])
+    flags = flag_transactions(scores, threshold=0.5)
+    assert list(flags) == [False, True, True]

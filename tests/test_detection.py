@@ -113,29 +113,33 @@ def test_siphon_legit_restaurant_low_score():
 # Couche 4 — score_cross_card
 # ---------------------------------------------------------------------------
 
-def test_cross_card_fraud_shared_device_high_score():
-    """Un device utilisé par 8 cartes distinctes donne un score > 0.7."""
+def test_cross_card_fraud_shared_merchant_high_score():
+    """Un même marchand utilisé par 6 cartes distinctes en 2h donne un score > 0.7."""
+    base = pd.Timestamp("2025-05-05 12:00:00")
     df = pd.DataFrame({
-        "transaction_id": ["tx_0"],
-        "card_id":        ["card_001"],
-        "device_id":      ["dev_X"],
-        "ip_address":     ["10.0.0.1"],
+        "transaction_id": [f"tx_{i}" for i in range(6)],
+        "card_id":        [f"card_{i:03d}" for i in range(6)],
+        "merchant_name":  ["QuickPay"] * 6,
+        "amount":         [50.0] * 6,
+        "timestamp":      [base + pd.Timedelta(minutes=10 * i) for i in range(6)],
+        "device_id":      [None] * 6,
+        "ip_address":     [None] * 6,
     })
-    device_profiles = {"dev_X": {"distinct_cards": 8}}
-    ip_profiles = {"10.0.0.1": {"nombre_cartes_distinctes": 1}}
-    scores = score_cross_card(df, device_profiles, ip_profiles)
-    assert scores.iloc[0] > 0.7
+    scores = score_cross_card(df, {}, {})
+    assert scores.max() > 0.7
 
 
 def test_cross_card_legit_single_card_low_score():
-    """Un device utilisé par une seule carte donne un score < 0.2."""
+    """Un marchand vu par une seule carte donne un score < 0.2."""
+    base = pd.Timestamp("2025-05-05 12:00:00")
     df = pd.DataFrame({
-        "transaction_id": ["tx_0"],
-        "card_id":        ["card_001"],
-        "device_id":      ["dev_Y"],
-        "ip_address":     ["10.0.0.2"],
+        "transaction_id": ["tx_0", "tx_1"],
+        "card_id":        ["card_001", "card_001"],
+        "merchant_name":  ["Tim Hortons", "Tim Hortons"],
+        "amount":         [12.0, 14.0],
+        "timestamp":      [base, base + pd.Timedelta(minutes=30)],
+        "device_id":      [None, None],
+        "ip_address":     [None, None],
     })
-    device_profiles = {"dev_Y": {"distinct_cards": 1}}
-    ip_profiles = {"10.0.0.2": {"nombre_cartes_distinctes": 1}}
-    scores = score_cross_card(df, device_profiles, ip_profiles)
-    assert scores.iloc[0] < 0.2
+    scores = score_cross_card(df, {}, {})
+    assert scores.max() < 0.2
