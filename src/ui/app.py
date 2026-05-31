@@ -93,8 +93,6 @@ def main() -> None:
         [data-testid="stToolbarActions"] {display: none;}
         [data-testid="stDecoration"] {display: none;}
         header[data-testid="stHeader"] {background: transparent;}
-        /* Blindage : le bouton de réouverture de la sidebar reste toujours visible */
-        [data-testid="stExpandSidebarButton"] {visibility: visible !important;}
         </style>
         """,
         unsafe_allow_html=True,
