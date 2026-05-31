@@ -161,6 +161,7 @@ body { padding: 18px 16px 28px; }
   font-size: 13px; color: #067647; font-weight: 500;
   animation: learn-in 280ms ease;
 }
+.learn-banner[hidden] { display: none; }   /* sinon display:flex écrase l'attribut hidden */
 .learn-banner .lb-icon { flex-shrink: 0; width: 16px; height: 16px; }
 @keyframes learn-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
 
