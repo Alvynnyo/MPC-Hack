@@ -6,6 +6,18 @@ tableau de bord et **boucle de feedback** en session.
 
 ## Quick start
 
+```bash
+git clone https://github.com/Alvynnyo/MPC-Hack
+cd MPC-Hack
+python setup.py
+```
+
+C'est tout. Le script crée l'environnement virtuel, installe les dépendances et lance l'app automatiquement. Seul prérequis : Python 3.9+ installé sur la machine.
+
+---
+
+### Étapes détaillées (si vous préférez le contrôle manuel)
+
 **Étape 1 — Cloner le repo**
 
 ```bash
