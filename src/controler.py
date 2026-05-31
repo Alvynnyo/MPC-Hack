@@ -90,10 +90,16 @@ def _generate_evidence(ctx: FlagContext) -> list[Evidence]:
 
     # Couche 4 : Réseau / Cross-Card
     if ctx.layer_scores.get("cross_card", 0) > 0.5:
-        if ctx.device_seen_with_n_cards > 1:
+
+        linked_cards = max(
+            ctx.device_seen_with_n_cards,
+            ctx.ip_seen_with_n_cards
+        )
+
+        if linked_cards > 1:
             evidence.append(Evidence(
-                label="Dispositif",
-                value=f"{ctx.device_seen_with_n_cards} cartes liées",
+                label="Identifiant technique",
+                value=f"{linked_cards} cartes liées",
                 tag="RÉSEAU SUSPECT",
                 severity="critical",
             ))
@@ -311,23 +317,54 @@ def initialize_fraud_queue(
 
         # Données Cross-Card : autres cartes sur le même appareil
         current_device = row_flagged.get('device_id')
+        current_ip = row_flagged.get('ip_address')
+
+        network_frames = []
+
+        # Cartes partageant le même appareil
         if pd.notna(current_device):
-            network_txs = (
+            network_frames.append(
                 df_full[
-                    (df_full['device_id'] == current_device) &
-                    (df_full['card_id'] != ctx.card_id)
+                    (df_full['device_id'] == current_device)
+                    & (df_full['card_id'] != ctx.card_id)
                 ]
-                .sort_values(by="timestamp", ascending=False)
-                .head(5)
             )
+
+        # Cartes partageant la même IP
+        if pd.notna(current_ip):
+            network_frames.append(
+                df_full[
+                    (df_full['ip_address'] == current_ip)
+                    & (df_full['card_id'] != ctx.card_id)
+                ]
+            )
+
+        if network_frames:
+
+            network_txs = (
+                pd.concat(network_frames)
+                .drop_duplicates(subset=["transaction_id"])
+                .sort_values(by="timestamp", ascending=False)
+                .head(10)
+            )
+
             case.device_data = [
                 {
-                    "last_seen": pd.to_datetime(n_row['timestamp']).strftime("%m-%d %H:%M"),
-                    "card_id":   str(n_row['card_id']),
-                    "tx_count":  len(df_full[df_full['card_id'] == n_row['card_id']]),
+                    "last_seen": pd.to_datetime(n_row["timestamp"]).strftime("%m-%d %H:%M"),
+                    "card_id": str(n_row["card_id"]),
+                    "tx_count": int(
+                        len(
+                            df_full[
+                                df_full["card_id"] == n_row["card_id"]
+                            ]
+                        )
+                    ),
+                    "amount": float(n_row["amount"]),
+                    "merchant": str(n_row["merchant_name"]),
                 }
                 for _, n_row in network_txs.iterrows()
             ]
+
         else:
             case.device_data = []
 
@@ -338,7 +375,7 @@ def initialize_fraud_queue(
 
 if __name__ == "__main__":
     print("🚀 Lancement du test du contrôleur...")
-    poids_test = Weights(w1=0.25, w2=0.25, w3=0.25, w4=0.25)
+    poids_test = Weights(w1=0.20, w2=0.30, w3=0.25, w4=0.25)
     try:
         queue = initialize_fraud_queue(
             csv_path="data/transactions.csv",
