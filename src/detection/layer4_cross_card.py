@@ -1,8 +1,8 @@
 """
 [P1] Couche 4 — Fraude croisée (cross-card).
 
-Cherche : un même device_id ou ip_address associé à > K card_id distincts
-dans le dataset. Pattern invisible si on regarde les cartes une par une.
+Cherche : plusieurs card_id distincts ayant utilisé le même merchant_name
+dans une fenêtre de 2 heures. Pattern invisible carte par carte.
 
 Voir PLAN.md, étape 2, couche 4.
 """
@@ -10,11 +10,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-def score_cross_card(
-    df: pd.DataFrame,
-    device_profiles: dict,
-    ip_profiles: dict,
-) -> pd.Series:
+def score_cross_card(df: pd.DataFrame) -> pd.Series:
     """
     Retourne un score [0, 1] par transaction.
 
@@ -22,8 +18,6 @@ def score_cross_card(
     ayant utilisé le même marchand dans les 2h précédentes.
     Score fort si >= 4 cartes distinctes.
     """
-    scores = pd.Series(0.0, index=df.index)
-
     df_temp = df.copy()
     df_temp['timestamp'] = pd.to_datetime(df_temp['timestamp'])
     df_temp = df_temp.sort_values('timestamp')

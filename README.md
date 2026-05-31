@@ -6,24 +6,62 @@ tableau de bord et **boucle de feedback** en session.
 
 ## Quick start
 
+**Étape 1 — Cloner le repo**
+
+```bash
+git clone https://github.com/Alvynnyo/MPC-Hack
+cd MPC-Hack
+```
+
+**Étape 2 — Créer un environnement virtuel**
+
+```bash
+python -m venv env
+
+# Windows
+env\Scripts\activate
+
+# Mac / Linux
+source env/bin/activate
+```
+
+**Étape 3 — Installer les dépendances**
+
 ```bash
 pip install -r requirements.txt
+```
 
-# (optionnel) clé Gemini pour de vraies explications IA ; sans clé, un verdict
-# de repli est affiché — l'app fonctionne quand même.
-cp .env.example .env        # puis renseigner GEMINI_API_KEY
+> **Note Windows** : si `pytest` ou `streamlit` ne sont pas reconnus comme commandes, utilise toujours `python -m pytest` et `python -m streamlit` à la place.
 
-# Lancer l'interface (une commande, depuis la racine)
+**Étape 4 — Configurer la clé Gemini (optionnel)**
+
+```bash
+cp .env.example .env
+```
+
+Puis ouvrir `.env` et renseigner `GEMINI_API_KEY=ta_clé_ici`. Sans clé, l'app fonctionne avec un verdict de repli — aucune fonctionnalité bloquée.
+
+**Étape 5 — Placer le dataset**
+
+Vérifier que `data/transactions.csv` existe. C'est le fichier d'entrée du pipeline.
+
+**Étape 6 — Lancer l'interface**
+
+```bash
 python -m streamlit run src/ui/app.py
 ```
 
-Rapport de détection en ligne de commande (sans UI) :
+L'app s'ouvre automatiquement dans le navigateur à `http://localhost:8501`.
+
+**Étape 7 — Optionnel : lancer le pipeline en ligne de commande**
 
 ```bash
-python main.py              # affiche les transactions flaggées + exporte data/transactions_scored.csv
+python main.py
 ```
 
-Tests :
+Affiche les transactions flaggées dans le terminal et exporte `data/transactions_scored.csv`.
+
+**Étape 8 — Optionnel : lancer les tests**
 
 ```bash
 python -m pytest -q

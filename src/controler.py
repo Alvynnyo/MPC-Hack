@@ -217,8 +217,24 @@ def initialize_fraud_queue(
             channel=str(row['channel']),
             cardholder_country=str(row['cardholder_country']),
             merchant_country=str(row['merchant_country']),
-            device_is_new=False,
-            ip_is_new=False,
+            device_is_new=(
+                pd.notna(current_device) and
+                current_device not in set(
+                    df_full[
+                        (df_full["card_id"] == card_id) &
+                        (df_full["transaction_id"] != row["transaction_id"])
+                    ]["device_id"].dropna().tolist()
+                )
+            ),
+            ip_is_new=(
+                pd.notna(current_ip) and
+                current_ip not in set(
+                    df_full[
+                        (df_full["card_id"] == card_id) &
+                        (df_full["transaction_id"] != row["transaction_id"])
+                    ]["ip_address"].dropna().tolist()
+                )
+            ),
             device_seen_with_n_cards=real_cards_linked,
             ip_seen_with_n_cards=int(cards_on_ip),
             fraud_score=float(row['final_score']),

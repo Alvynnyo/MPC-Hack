@@ -1,8 +1,8 @@
 """
 [P1] Couche 3 — Siphonnement rapide.
 
-Cherche : rafale de transactions (> 3) sur 10 minutes pour la même carte,
-montants proches ou identiques, catégories à risque (gift_card, online_retail).
+Cherche : rafale de transactions (> 3) sur les 10 minutes précédentes pour la même carte,
+catégories à risque (gift_card, online_retail).
 
 Voir PLAN.md, étape 2, couche 3.
 """

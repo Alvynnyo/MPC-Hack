@@ -6,7 +6,6 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from src.controler import initialize_fraud_queue
-from src.scoring import Weights
 from src.feedback import FeedbackManager
 from src import audit
 

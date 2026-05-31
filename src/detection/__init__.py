@@ -6,7 +6,7 @@ from .layer4_cross_card import score_cross_card
 
 __all__ = [
     "score_amount_deviation",
-    "score_impossible_velocity",
+    "score_burst_poisson",
     "score_burst",
     "score_cross_card",
 ]

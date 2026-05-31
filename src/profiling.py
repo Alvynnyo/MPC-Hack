@@ -69,11 +69,7 @@ def build_device_profiles(df: pd.DataFrame) -> dict:
 
 
 def build_ip_profiles(df: pd.DataFrame) -> dict:
-    """
-    Pour chaque ip_address : nombre de cartes distinctes, total transactions.
-
-    TODO P1 : implémenter.
-    """
+    """Pour chaque ip_address : nombre de cartes distinctes et total de transactions."""
 
     df_ip = df.dropna(subset=['ip_address'])
 
