@@ -9,9 +9,9 @@ from src.ui.mock_data import CaseFile, Evidence, PreviousTx
 
 def _determine_risk_label(score: float) -> str:
     """Dérive le label de risque en fonction du score."""
-    if score >= 0.75:
+    if score >= 0.60:
         return "ÉLEVÉ"
-    if score >= 0.45:
+    if score >= 0.40:
         return "MOYEN"
     return "FAIBLE"
 
@@ -75,7 +75,7 @@ def _generate_previous_tx(card_group: pd.DataFrame, current_tx_id: str) -> list[
 def initialize_fraud_queue(
     csv_path: str = "data/transactions.csv",
     weights: Weights | None = None,
-    threshold: float = 0.5,
+    threshold: float = 0.28,
     feedback_manager: FeedbackManager | None = None
 ) -> list[CaseFile]:
     """Point d'entrée principal pour l'UI."""
@@ -140,3 +140,45 @@ def initialize_fraud_queue(
         ui_cases.append(case)
 
     return ui_cases
+
+# --- Bloc de Test Local ---
+if __name__ == "__main__":
+    from src.scoring import Weights
+    
+    print("🚀 Lancement du test du contrôleur (orchestrator.py)...")
+    
+    # On utilise le même seuil que P1 (0.33) pour s'attendre à ~69 cas
+    poids_test = Weights(w1=0.25, w2=0.25, w3=0.25, w4=0.25)
+    
+    try:
+        # Génération de la file d'attente
+        queue = initialize_fraud_queue(
+            csv_path="data/transactions.csv",
+            weights=poids_test,
+            threshold=0.28
+        )
+        
+        print(f"\n✅ Succès ! Le contrôleur a généré {len(queue)} dossiers (CaseFile).")
+        
+        if queue:
+            print("\n--- 🔍 Aperçu du Top 3 des dossiers les plus suspects ---")
+            # On n'affiche que les 3 premiers pour ne pas polluer le terminal
+            for case in queue[:3]:
+                print(f"\n📂 DOSSIER {case.case_id} ({case.case_index} / {case.case_total})")
+                print(f"   💳 Carte   : {case.card_id}")
+                print(f"   💰 Montant : {case.amount:.2f} $")
+                print(f"   🚨 Risque  : {case.score:.2f} [{case.risk_label}]")
+                print(f"   🤖 Verdict IA : {case.verdict}")
+                
+                print(f"   🔎 Preuves ({len(case.evidence)} signaux) :")
+                for ev in case.evidence:
+                    print(f"      - {ev.label} : {ev.value} [{ev.tag}] (Sévérité: {ev.severity})")
+                    
+                print(f"   🕒 Historique ({len(case.previous)} tx récentes) :")
+                for prev in case.previous:
+                    marqueur = "👈 (Transaction analysée)" if prev.status == "current" else ""
+                    print(f"      - {prev.date} | {prev.merchant} | {prev.amount:.2f} $ {marqueur}")
+
+    except FileNotFoundError:
+        print("\n❌ Erreur : Le fichier 'data/transactions.csv' est introuvable.")
+        print("Assure-toi de lancer la commande depuis la racine du projet (MPC-Hack/).")

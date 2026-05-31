@@ -82,8 +82,8 @@ def main() -> None:
     def fetch_real_cases(_feedback):
         return initialize_fraud_queue(
             csv_path="data/transactions.csv",
-            weights=Weights(w1=0.25, w2=0.25, w3=0.25, w4=0.25),
-            threshold=0.5,
+            # weights=Weights(w1=0.25, w2=0.25, w3=0.25, w4=0.25),
+            threshold=0.28,
             feedback_manager=_feedback
         )
 
