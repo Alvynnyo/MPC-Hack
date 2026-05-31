@@ -308,7 +308,10 @@ body {
   font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
   text-transform: uppercase; color: var(--c-text-3);
 }
-.ev-value { font-family: var(--font-mono); font-size: 13px; color: var(--c-text); }
+.ev-value {
+  font-family: var(--font-mono); font-size: 13px; color: var(--c-text);
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .badge {
   display: inline-flex; align-items: center; padding: 2px 8px;
   border: 1px solid; border-radius: 6px; font-size: 11px; font-weight: 600;
@@ -321,9 +324,10 @@ body {
   align-items: center; padding: 9px 14px; border-bottom: 1px solid #F2F4F7; position: relative;
 }
 .tx-row:last-child { border-bottom: none; }
+.tx-row:not(.is-current):hover { background: #FAFBFC; }
 .tx-row.is-current { background: #EFF4FF; box-shadow: inset 3px 0 0 #1E40AF; }
 .tx-date { font-family: var(--font-mono); font-size: 12px; color: var(--c-text-3); }
-.tx-merchant { font-size: 13px; color: var(--c-text); }
+.tx-merchant { font-size: 13px; color: var(--c-text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tx-amount {
   font-family: var(--font-mono); font-size: 13px; text-align: right;
   font-variant-numeric: tabular-nums; color: var(--c-text);

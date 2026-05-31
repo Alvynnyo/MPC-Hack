@@ -71,7 +71,7 @@ def main() -> None:
 
     # Deck de dossiers swipables (mocké pour l'instant)
     deck_html = render_swipe_deck(MOCK_CASES)
-    components.html(deck_html, height=1080, scrolling=False)
+    components.html(deck_html, height=1160, scrolling=False)
 
 
 if __name__ == "__main__":

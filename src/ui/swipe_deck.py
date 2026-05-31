@@ -22,7 +22,11 @@ from src.ui.mock_data import CaseFile
 
 DECK_CSS = """
 body { padding: 18px 16px 28px; }
-.deck-wrap { width: min(560px, 100%); margin: 0 auto; }
+.deck-wrap {
+  width: min(560px, 100%); margin: 0 auto;
+  opacity: 0; transition: opacity 350ms ease;
+}
+.deck-wrap.ready { opacity: 1; }
 
 .stage { position: relative; }   /* hauteur fixée par JS */
 
@@ -66,6 +70,11 @@ body { padding: 18px 16px 28px; }
 .deck-progress .count { font-family: var(--font-mono); font-size: 12px; color: var(--c-text-3); }
 .progress-track { height: 6px; border-radius: 999px; background: #EAECF0; overflow: hidden; margin-bottom: 16px; }
 .progress-fill { height: 100%; width: 0%; background: #1E40AF; border-radius: 999px; transition: width 280ms ease; }
+
+/* Bouton Annuler (ghost, pleine largeur) */
+.btn-undo { width: 100%; margin-top: 10px; color: var(--c-text-2); }
+.btn:disabled { opacity: 0.45; cursor: default; box-shadow: none; }
+.btn:disabled:hover { box-shadow: none; background: var(--c-surface); }
 
 /* Écran de fin */
 .deck-done {
@@ -158,6 +167,8 @@ DECK_JS = r"""
     } else {
       labelEl.textContent = 'File terminée';
     }
+    const undoBtn = document.getElementById('undoBtn');
+    if (undoBtn) undoBtn.disabled = history.length === 0;
   }
 
   function applyDrag(card, dx, dy) {
@@ -337,15 +348,51 @@ DECK_JS = r"""
   });
 
   // Init
-  window.addEventListener('load', () => { sizeStage(); restack(); window.focus(); });
+  function reveal() {
+    const wrap = document.querySelector('.deck-wrap');
+    if (wrap) wrap.classList.add('ready');
+  }
+  window.addEventListener('load', () => { sizeStage(); restack(); reveal(); window.focus(); });
   sizeStage();
   restack();
+  reveal();
 })();
 """
 
 
+def _render_empty_state() -> str:
+    """Affiché quand il n'y a aucun dossier à réviser (file vide)."""
+    return f"""<!DOCTYPE html>
+<html>
+<head><style>{CARD_CSS}
+body {{ padding: 48px 16px; display: flex; justify-content: center; }}
+.empty {{
+  width: min(560px, 100%); background: var(--c-surface);
+  border: 1px solid var(--c-border); border-radius: 16px;
+  padding: 48px 24px; text-align: center;
+  box-shadow: 0 1px 2px rgba(16,24,40,0.04), 0 20px 32px -12px rgba(16,24,40,0.10);
+}}
+.empty h2 {{ font-size: 18px; font-weight: 600; color: var(--c-text); margin-bottom: 6px; }}
+.empty p {{ font-size: 13px; color: var(--c-text-3); }}
+</style></head>
+<body>
+  <div class="empty">
+    <h2>Aucun dossier à réviser</h2>
+    <p>La file est vide : aucune transaction n'a été signalée pour le moment.</p>
+  </div>
+</body>
+</html>
+"""
+
+
 def render_swipe_deck(cases: list[CaseFile]) -> str:
-    """Document HTML complet : pile de dossiers swipables + contrôles + fin."""
+    """Document HTML complet : pile de dossiers swipables + contrôles + fin.
+
+    Si `cases` est vide, renvoie un état vide propre plutôt qu'un deck cassé.
+    """
+    if not cases:
+        return _render_empty_state()
+
     cards_html = "\n".join(
         f"""
         <div class="swipe-card" data-index="{i}" data-id="{case.case_id}">
@@ -376,9 +423,7 @@ def render_swipe_deck(cases: list[CaseFile]) -> str:
       </div>
       <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
       {controls}
-      <div style="text-align:center; margin-top: 6px;">
-        <button id="undoBtn" class="btn" style="display:none;">Annuler</button>
-      </div>
+      <button id="undoBtn" class="btn btn-undo" type="button" disabled>Annuler la dernière décision (Z)</button>
     </div>
 
     <div class="deck-done" id="deckDone" hidden>
