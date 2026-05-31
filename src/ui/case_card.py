@@ -60,11 +60,14 @@ ICON_ARROW_UP = (
 def _severity_tokens(severity: str) -> dict:
     """Couleurs (bg, fg, border) pour un niveau de sévérité — palette sobre.
 
-    critical → bleu sombre · warning → jaune clair · info → vert.
+    critical → Rouge  · warning → warning → Orange/Jaune · info → vert.
     """
-    return {
-        "critical": {"bg": "#EFF4FF", "fg": "#1E3A8A", "border": "#C7D7FE", "icon": ICON_CRITICAL},
+    return{
+    # ROUGE PROFESSIONNEL
+        "critical": {"bg": "#FEF3F2", "fg": "#B42318", "border": "#FECDCA", "icon": ICON_CRITICAL},
+        # ORANGE / JAUNE PRO
         "warning":  {"bg": "#FEFCE8", "fg": "#854D0E", "border": "#FDE68A", "icon": ICON_WARNING},
+        # VERT PRO
         "info":     {"bg": "#ECFDF3", "fg": "#067647", "border": "#ABEFC6", "icon": ICON_INFO},
     }.get(severity, {"bg": "#F2F4F7", "fg": "#475467", "border": "#E4E7EC", "icon": ICON_INFO})
 
@@ -74,9 +77,9 @@ def _risk_tokens(score: float) -> dict:
 
     élevé → bleu sombre · moyen → jaune clair · faible → vert.
     """
-    if score >= 0.75:
+    if score >= 0.60:
         return {"bg": "#EFF4FF", "fg": "#1E3A8A", "border": "#C7D7FE", "bar": "#1E40AF"}
-    if score >= 0.45:
+    if score >= 0.40:
         return {"bg": "#FEFCE8", "fg": "#854D0E", "border": "#FDE68A", "bar": "#CA8A04"}
     return {"bg": "#ECFDF3", "fg": "#067647", "border": "#ABEFC6", "bar": "#17B26A"}
 

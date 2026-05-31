@@ -16,7 +16,7 @@ de fin. Le pont vers le backend Python (audit.py / feedback.py) viendra ensuite.
 """
 from __future__ import annotations
 
-from src.ui.case_card import CARD_CSS, render_card_inner, render_controls
+from src.ui.cart_renderer_v2 import CARD_CSS, render_card_inner, render_controls
 from src.ui.mock_data import CaseFile
 
 

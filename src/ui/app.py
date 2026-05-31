@@ -1,12 +1,3 @@
-"""
-[P3] UI Streamlit — "Dossier d'enquête" (file de triage pro).
-
-Lancement :
-    python -m streamlit run src/ui/app.py
-
-Voir design-system/fraud-hunter/MASTER.md pour les règles visuelles.
-Voir PLAN.md étape 5 pour le comportement.
-"""
 from __future__ import annotations
 
 import json
@@ -14,12 +5,13 @@ import json
 import streamlit as st
 import streamlit.components.v1 as components
 
-from src.ui.swipe_deck import render_swipe_deck
-
 from src.controler import initialize_fraud_queue
 from src.scoring import Weights
 from src.feedback import FeedbackManager
 from src import audit
+
+# --- AJOUT DES IMPORTS MANQUANTS POUR L'INTERFACE ---
+from src.ui.swipe_deck import render_swipe_deck
 
 
 # Mappage décision UI -> labels backend
@@ -70,7 +62,6 @@ def render_decision_importer() -> None:
             st.caption(f"Audit log — {len(log)} entrée(s) (15 dernières) :")
             st.dataframe(log[-15:], use_container_width=True, hide_index=True)
 
-
 def main() -> None:
     st.set_page_config(
         page_title="Fraud Hunter",
@@ -78,13 +69,12 @@ def main() -> None:
         initial_sidebar_state="collapsed",
     )
 
-    # Style global de l'app (fond clair, header pro)
+    # Feuille de style globale de l'application (Fond neutre et conteneur centré)
     st.markdown(
         """
         <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
-        /* Fond clair neutre */
         .stApp {
             background: #F2F4F7;
         }
@@ -95,14 +85,14 @@ def main() -> None:
             max-width: 640px;
         }
 
-        /* Cache le menu burger et footer Streamlit pour démo */
+        /* Masquage des ornements Streamlit pour épurer la démo technique */
         #MainMenu, footer, header {visibility: hidden;}
         </style>
         """,
         unsafe_allow_html=True,
     )
 
-    # En-tête de page (titre app) — sobre, sur fond clair
+    # En-tête de la plateforme (Branding minimalist et professionnel)
     st.markdown(
         """
         <div style="font-family: 'Inter', sans-serif; margin-bottom: 1.25rem;
@@ -118,7 +108,7 @@ def main() -> None:
                 </div>
                 <span style="font-size: 16px; font-weight: 600; color: #101828;">Fraud Hunter</span>
             </div>
-            <span style="font-size: 12px; color: #98A2B3;">Trust &amp; Safety · File de révision</span>
+            <span style="font-size: 12px; color: #98A2B3;">Trust &amp; Safety · File de révision en direct</span>
         </div>
         """,
         unsafe_allow_html=True,
@@ -128,25 +118,25 @@ def main() -> None:
     if "feedback" not in st.session_state:
         st.session_state.feedback = FeedbackManager()
 
-    @st.cache_data(show_spinner=False)
     def fetch_real_cases(_feedback):
         return initialize_fraud_queue(
             csv_path="data/transactions.csv",
-            # weights=Weights(w1=0.25, w2=0.25, w3=0.25, w4=0.25),
             threshold=0.28,
             feedback_manager=_feedback
         )
 
-    with st.spinner("Analyse des transactions et verdicts IA en cours..."):
+    with st.spinner("Analyse multicouche des transactions et verdicts IA..."):
         cases_queue = fetch_real_cases(st.session_state.feedback)
 
     if not cases_queue:
-        st.success("File d'attente vide. Aucune fraude détectée.")
-        render_decision_importer()
+        st.success("Félicitations. La file de triage est vide. Aucun risque détecté.")
         return
 
+    # Compilation et rendu du deck interactif de cartes
     deck_html = render_swipe_deck(cases_queue)
-    components.html(deck_html, height=1220, scrolling=False)
+    
+    # --- OPTIMISATION : Hauteur ajustée de 1250 à 680 suite au fix CSS compact ---
+    components.html(deck_html, height=1600, scrolling=False)
 
     render_decision_importer()
 

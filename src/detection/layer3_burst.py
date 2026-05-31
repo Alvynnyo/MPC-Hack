@@ -9,6 +9,8 @@ Voir PLAN.md, étape 2, couche 3.
 from __future__ import annotations
 
 import pandas as pd
+
+
 def score_burst(df: pd.DataFrame) -> pd.Series:
     df_temp = df.copy()
     df_temp['timestamp'] = pd.to_datetime(df_temp['timestamp'])
@@ -44,3 +46,36 @@ def score_burst(df: pd.DataFrame) -> pd.Series:
         scores[idx] = min(score, 1.0)
 
     return scores.reindex(df.index)
+
+
+def get_burst_transactions(
+    df: pd.DataFrame,
+    card_id: str,
+    anchor_timestamp,
+    window_minutes: int = 10,
+) -> pd.DataFrame:
+    """
+    Retourne les transactions de la rafale réelle pour une carte donnée.
+
+    On cherche toutes les tx de `card_id` dans la fenêtre
+    [anchor_timestamp - window_minutes, anchor_timestamp + window_minutes],
+    triées chronologiquement.
+
+    Utilisé par controler.py pour construire case.previous quand
+    le signal dominant est "vitesse", afin d'afficher la séquence réelle
+    de la rafale plutôt que l'historique général de la carte.
+    """
+    df_temp = df.copy()
+    df_temp['timestamp'] = pd.to_datetime(df_temp['timestamp'])
+    anchor = pd.to_datetime(anchor_timestamp)
+
+    window_start = anchor - pd.Timedelta(minutes=window_minutes)
+    window_end   = anchor + pd.Timedelta(minutes=window_minutes)
+
+    mask = (
+        (df_temp['card_id'] == card_id) &
+        (df_temp['timestamp'] >= window_start) &
+        (df_temp['timestamp'] <= window_end)
+    )
+
+    return df_temp[mask].sort_values('timestamp')

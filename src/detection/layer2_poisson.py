@@ -90,3 +90,36 @@ def score_burst_poisson(df: pd.DataFrame) -> pd.Series:
         scores[i] = max(score_m, score_c)
 
     return pd.Series(scores, index=df2.index)
+
+
+def get_merchant_burst_transactions(
+    df: pd.DataFrame,
+    merchant_name: str,
+    anchor_timestamp,
+    window_minutes: int = 120,
+) -> pd.DataFrame:
+    """
+    Retourne les transactions du pic Poisson réel pour un marchand donné.
+
+    Extrait toutes les tx de `merchant_name` dans la fenêtre
+    [anchor_timestamp - window_minutes, anchor_timestamp + window_minutes],
+    triées chronologiquement — cohérent avec la fenêtre 2h de score_burst_poisson.
+
+    Utilisé par controler.py pour construire case.merchant_data quand
+    le signal dominant est "poisson", afin de montrer le vrai pic
+    plutôt que les 5 dernières tx du marchand toutes dates confondues.
+    """
+    df_temp = df.copy()
+    df_temp["timestamp"] = pd.to_datetime(df_temp["timestamp"])
+    anchor = pd.to_datetime(anchor_timestamp)
+
+    window_start = anchor - pd.Timedelta(minutes=window_minutes)
+    window_end   = anchor + pd.Timedelta(minutes=window_minutes)
+
+    mask = (
+        (df_temp["merchant_name"] == merchant_name) &
+        (df_temp["timestamp"] >= window_start) &
+        (df_temp["timestamp"] <= window_end)
+    )
+
+    return df_temp[mask].sort_values("timestamp")

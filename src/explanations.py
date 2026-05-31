@@ -11,14 +11,10 @@ import google.generativeai as genai
 from dotenv import load_dotenv
 
 # --- Configuration Initiale ---
-# Chargement des variables du fichier .env
 load_dotenv()
 
-# Configuration de Gemini
-# Si la clé est absente, l'API lèvera une erreur explicite à l'exécution.
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+genai.configure(api_key="AQ.Ab8RN6LjPqL7OTz8QSqd9w5ejrs9q4RuM0K8-EBjGJ9wV1kEKA")
 
-# gemini-1.5-flash est l'équivalent de claude-haiku : extrêmement rapide et peu coûteux
 MODEL_NAME = 'gemini-2.5-flash'
 
 # Cache disque des explications (clé = transaction_id) : un dossier déjà expliqué
@@ -64,52 +60,178 @@ class FlagContext:
     layer_scores: dict  # {"amount": s1, "velocity": s2, "burst": s3, "cross_card": s4}
 
 
+# ---------------------------------------------------------------------------
+# Helpers internes : traduction des scores en langage humain
+# ---------------------------------------------------------------------------
+
+def _build_pattern_context(ctx: FlagContext) -> tuple[list[str], str]:
+    """
+    Traduit les scores des couches en descriptions de patterns lisibles.
+    Retourne (liste d'anomalies textuelles, signal dominant sous forme de clé).
+    """
+    anomalies = []
+    dominant = "montant"
+    dominant_score = 0.0
+
+    # Couche 1 — Montant atypique
+    s_amount = ctx.layer_scores.get("amount", 0)
+    if s_amount > 0.5:
+        if ctx.median_amount_for_card > 0:
+            ratio = round(ctx.amount / ctx.median_amount_for_card)
+            anomalies.append(
+                f"Le montant de {ctx.amount:.2f} $ est environ {ratio}× supérieur "
+                f"aux habitudes habituelles de cette carte."
+            )
+        else:
+            anomalies.append(
+                f"Le montant de {ctx.amount:.2f} $ est nettement supérieur "
+                f"au profil de dépense habituel de cette carte."
+            )
+        if s_amount > dominant_score:
+            dominant_score = s_amount
+            dominant = "montant"
+
+    # Couche 2 — Pic de volume sur le terminal marchand (Poisson)
+    s_vel = ctx.layer_scores.get("velocity", 0)
+    if s_vel > 0.5:
+        anomalies.append(
+            f"Le terminal de {ctx.merchant_name} enregistre un pic inhabituel "
+            f"de transactions sur une courte fenêtre de temps — activité incohérente "
+            f"avec le rythme normal de ce marchand."
+        )
+        if s_vel > dominant_score:
+            dominant_score = s_vel
+            dominant = "poisson"
+
+    # Couche 3 — Rafale sur la carte (burst / card-testing)
+    s_burst = ctx.layer_scores.get("burst", 0)
+    if s_burst > 0.5:
+        anomalies.append(
+            "Succession rapide de micro-transactions sur cette carte — "
+            "schéma caractéristique du card-testing : on valide la carte "
+            "avec de petits montants avant une exploitation à plus grande échelle."
+        )
+        if s_burst > dominant_score:
+            dominant_score = s_burst
+            dominant = "vitesse"
+
+    # Couche 4 — Réseau cross-card
+    s_cross = ctx.layer_scores.get("cross_card", 0)
+    if s_cross > 0.5:
+        if ctx.device_seen_with_n_cards > 1:
+            anomalies.append(
+                f"Le même appareil a servi à opérer {ctx.device_seen_with_n_cards} cartes "
+                f"différentes — infrastructure typique d'une fraude organisée pilotée "
+                f"depuis un terminal unique compromis."
+            )
+        else:
+            anomalies.append(
+                "L'empreinte technique de connexion (appareil ou adresse réseau) "
+                "est associée à des activités suspectes impliquant plusieurs comptes."
+            )
+        if s_cross > dominant_score:
+            dominant_score = s_cross
+            dominant = "cross_card"
+
+    # Contexte géographique — signal contextuel (pas une couche scorée)
+    if ctx.merchant_country != ctx.cardholder_country:
+        anomalies.append(
+            f"La transaction est émise depuis {ctx.merchant_country} alors que "
+            f"la carte est enregistrée au {ctx.cardholder_country} — "
+            f"incohérence géographique à confirmer."
+        )
+
+    if not anomalies:
+        anomalies.append(
+            "Accumulation de signaux comportementaux cohérents avec "
+            "un usage frauduleux de la carte."
+        )
+
+    return anomalies, dominant
+
+
+def _build_fallback(ctx: FlagContext, anomalies: list[str]) -> str:
+    """
+    Fallback lisible si l'API Gemini échoue.
+    Zéro score, zéro terme technique interne.
+    """
+    pattern_labels = {
+        "montant":    "montant anormalement élevé par rapport au profil habituel",
+        "poisson":    "pic de volume inhabituel sur le terminal marchand",
+        "vitesse":    "rafale de micro-transactions (card-testing)",
+        "cross_card": "fraude croisée — plusieurs cartes sur le même appareil",
+    }
+    _, dominant = _build_pattern_context(ctx)
+    pattern_label = pattern_labels.get(dominant, "comportement de paiement atypique")
+
+    # On prend la première anomalie textualisée pour enrichir le fallback
+    first_anomaly = anomalies[0] if anomalies else "Un comportement inhabituel a été relevé."
+
+    return (
+        f"Pattern identifié : {pattern_label}. "
+        f"{first_anomaly} "
+        f"Une vérification manuelle est recommandée avant d'autoriser cette transaction."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Génération Gemini
+# ---------------------------------------------------------------------------
 
 def generate_explanation(ctx: FlagContext) -> str:
     """
-    Appelle Gemini API et retourne une explication en français, 2-3 phrases.
+    Appelle Gemini et retourne une explication en français, 2-3 phrases,
+    centrée sur les patterns concrets — sans aucun score ni terme technique interne.
     """
-    # 1. Préparation du contexte BASSÉE SUR LES SCORES DE P1
-    anomalies = []
-    
-    if ctx.layer_scores.get("amount", 0) > 0.5:
-        anomalies.append(f"Montant anormalement élevé pour cette carte (Anomalie: {ctx.layer_scores['amount']:.2f}).")
-        
-    if ctx.layer_scores.get("velocity", 0) > 0.5 or ctx.layer_scores.get("burst", 0) > 0.5:
-        anomalies.append("Rafale de transactions détectée dans un laps de temps anormalement court.")
-        
-    if ctx.layer_scores.get("cross_card", 0) > 0.5:
-        anomalies.append("Forte probabilité de fraude croisée (Dispositif ou IP associé à de multiples cartes).")
+    anomalies, dominant = _build_pattern_context(ctx)
+    anomalies_str = "\n".join(f"- {a}" for a in anomalies)
 
-    if ctx.merchant_country != ctx.cardholder_country:
-        anomalies.append(f"Transaction internationale suspecte : marchand en {ctx.merchant_country}, carte en {ctx.cardholder_country}.")
+    prompt = f"""Tu es un analyste senior en prévention de la fraude financière.
 
-    anomalies_str = " - " + "\n - ".join(anomalies) if anomalies else " - Accumulation de signaux faibles suspects."
+Rédige un verdict de 2 à 3 phrases maximum expliquant POURQUOI cette transaction est suspecte.
 
-    prompt = f"""
-    Tu es un analyste en prévention de la fraude financière senior.
-    Rédige un verdict concis (2 ou 3 phrases maximum) expliquant pourquoi la transaction suivante est suspecte.
-    Le ton doit être professionnel, factuel et direct. Va droit au but.
+RÈGLES ABSOLUES — à respecter impérativement :
+- Ne mentionne JAMAIS de score, de chiffre de probabilité, de pourcentage ou de valeur numérique technique.
+- N'utilise JAMAIS les mots : "anomalie", "s1", "s2", "s3", "s4", "couche", "moteur", "score global", "taux".
+- Décris le PATTERN comportemental concret (séquence d'actions, contexte, incohérence).
+- Reste factuel, professionnel, directement compréhensible par un analyste humain non technique.
+- Ne commence PAS par "Cette transaction" — commence par le comportement ou le contexte détecté.
+- Ne conclus PAS par une recommandation générique ("surveiller", "vérifier", etc.) : la conclusion doit nommer le risque précis.
 
-    DONNÉES DE LA TRANSACTION :
-    - Transaction ID : {ctx.transaction_id}
-    - Marchand : {ctx.merchant_name} (Catégorie: {ctx.merchant_category})
-    - Canal : {ctx.channel}
+CONTEXTE DE LA TRANSACTION :
+- Marchand : {ctx.merchant_name} (catégorie : {ctx.merchant_category})
+- Canal : {ctx.channel}
+- Pays carte → pays marchand : {ctx.cardholder_country} → {ctx.merchant_country}
 
-    ANOMALIES DÉTECTÉES PAR LE MOTEUR :
-    {anomalies_str}
+PATTERNS IDENTIFIÉS PAR LE MOTEUR DE DÉTECTION :
+{anomalies_str}
 
-    VERDICT :
-    """
+VERDICT (2-3 phrases, ton analyste senior) :"""
 
     try:
         model = genai.GenerativeModel(MODEL_NAME)
-        response = model.generate_content(prompt, generation_config={"temperature": 0.1})
-        return response.text.strip()
-    
+        response = model.generate_content(
+            prompt,
+            generation_config={"temperature": 0.15, "max_output_tokens": 200}
+        )
+        text = response.text.strip()
+
+        # Garde-fou : si Gemini glisse un terme interdit, on bascule sur le fallback propre
+        forbidden_keywords = [
+            "score", "anomalie:", "0.", "1.", " s1", " s2", " s3", " s4",
+            "couche", "moteur", "taux", "%"
+        ]
+        if any(kw in text.lower() for kw in forbidden_keywords):
+            logging.warning(
+                f"[{ctx.transaction_id}] Gemini a produit un terme interdit — fallback activé."
+            )
+            return _build_fallback(ctx, anomalies)
+
+        return text
+
     except Exception as e:
         logging.error(f"Erreur API Gemini pour {ctx.transaction_id} : {e}")
-        return f"Alerte système : Transaction suspecte (Score global {ctx.fraud_score:.2f}). {anomalies_str}"
+        return _build_fallback(ctx, anomalies)
 
 
 def precompute_explanations(flagged_contexts: list[FlagContext], max_workers: int = 4) -> dict[str, str]:
@@ -154,30 +276,3 @@ def precompute_explanations(flagged_contexts: list[FlagContext], max_workers: in
         _save_cache(cache)
 
     return results
-
-# # --- Test Local (Mock) ---
-# if __name__ == "__main__":
-#     # Création de fausses données pour tester le script indépendamment de l'équipe Data
-#     mock_ctx_1 = FlagContext(
-#         transaction_id="tx_001", card_id="c_123", amount=890.0, median_amount_for_card=20.0,
-#         merchant_name="Best Buy", merchant_category="electronics", channel="online",
-#         cardholder_country="CA", merchant_country="US", device_is_new=True, ip_is_new=True,
-#         device_seen_with_n_cards=4, ip_seen_with_n_cards=4, fraud_score=0.92,
-#         layer_scores={"amount": 0.9, "velocity": 0.1, "burst": 0.0, "cross_card": 0.95}
-#     )
-    
-#     mock_ctx_2 = FlagContext(
-#         transaction_id="tx_002", card_id="c_456", amount=45.0, median_amount_for_card=40.0,
-#         merchant_name="Uber Eats", merchant_category="restaurant", channel="online",
-#         cardholder_country="CA", merchant_country="CA", device_is_new=False, ip_is_new=False,
-#         device_seen_with_n_cards=1, ip_seen_with_n_cards=1, fraud_score=0.76,
-#         layer_scores={"amount": 0.1, "velocity": 0.0, "burst": 0.8, "cross_card": 0.0}
-#     )
-
-#     # Test du batching
-#     contexts = [mock_ctx_1, mock_ctx_2]
-#     explanations_dict = precompute_explanations(contexts)
-    
-#     for tx_id, exp in explanations_dict.items():
-#         print(f"\n[Dossier {tx_id}]")
-#         print(exp)
