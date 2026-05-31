@@ -24,7 +24,7 @@ def score_burst(df: pd.DataFrame) -> pd.Series:
 
     scores = pd.Series(0.0, index=df_temp.index)
 
-    window_counts = df_temp.groupby('card_id').rolling('10T', on='timestamp')['transaction_id'].count()
+    window_counts = df_temp.groupby('card_id').rolling('10min', on='timestamp')['transaction_id'].count()
 
     window_counts = window_counts.reset_index(level=0).drop(columns='card_id')
     df_temp['tx_count_10m'] = window_counts['transaction_id']
