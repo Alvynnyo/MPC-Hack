@@ -1,199 +1,159 @@
 # Design System Master File — Fraud Hunter
 
-> **LOGIC:** When building a specific page, first check `design-system/pages/[page-name].md`.
+> **LOGIC:** When building a specific page, first check `design-system/fraud-hunter/pages/[page-name].md`.
 > If that file exists, its rules **override** this Master file.
 > If not, strictly follow the rules below.
 
 ---
 
 **Project:** Fraud Hunter — MPC Hacks 2026 (Track Valsoft)
-**Direction visuelle :** Paper Detective + Tinder Swipe
-**Métaphore :** Fiche d'enquête tapée à la machine, swipée comme dans Tinder
+**Direction visuelle :** Outil de triage professionnel (style Linear / Stripe / Mercury)
+**Interaction signature :** file de révision swipable (type Tinder), une carte à la fois
 
 ---
 
 ## Identité visuelle
 
-L'utilisateur incarne un inspecteur qui passe en revue des dossiers de fraude. Chaque dossier est une **fiche d'enquête papier** posée sur un bureau. Le reviewer la lit, tamponne sa décision, et passe au suivant — à la manière d'un swipe Tinder.
+Un outil de revue de fraude clair, sobre et crédible. L'analyste passe en revue
+des dossiers signalés, un à la fois, et tranche (fraude / légitime / escalader)
+au clavier ou en swipant la carte. Esthétique fond clair, typographie nette,
+icônes vectorielles — aucun effet « gadget ».
 
-### Anti-vibes (à éviter absolument)
-- **Pas** de dark mode (on est dans un bureau, pas dans une salle de serveurs)
-- **Pas** de gradients (anti-pattern paper)
-- **Pas** d'animations modernes type scale/elevation (anti-pattern paper)
-- **Pas** d'émojis comme icônes
-- **Pas** de purple/pink (vibe AI playground — perte de crédibilité)
-- **Pas** de néon ni de couleurs flashy
+### Anti-vibes (à éviter)
+- **Pas** de fond sombre (le canvas est clair)
+- **Pas** d'emojis comme icônes (icônes SVG Lucide uniquement)
+- **Pas** de police manuscrite / décorative
+- **Pas** de gradients voyants, de tampons, de scotch, de texture papier
+- **Pas** de violet/rose « vibe IA »
+- **Pas** d'animation qui déplace le layout (scale au hover, etc.)
 
 ---
 
 ## Palette de couleurs
 
-| Rôle | Hex | Usage |
-|---|---|---|
-| **Paper Background** | `#FDFBF7` | Fond global de l'app et des cartes |
-| **Paper Off-White** | `#F5F0E6` | Variante pour zones de contraste subtil (header carte) |
-| **Ink Black** | `#1A1A1A` | Texte principal (haut contraste) |
-| **Pencil Grey** | `#4A4A4A` | Texte secondaire, labels |
-| **Faded Sepia** | `#D4A574` | Bordures, séparateurs, métadonnées discrètes |
-| **Kraft Brown** | `#C4A77D` | Accent papier (mentions, étiquettes anciennes) |
-| **Stamp Red** | `#B91C1C` | Tampon "FRAUDE CONFIRMÉE" |
-| **Stamp Green** | `#15803D` | Tampon "CLASSÉ INNOCENT" |
-| **Stamp Amber** | `#B45309` | Tampon "À ESCALADER" |
-| **Warning Yellow** | `#FEF3C7` | Highlights jaunes (style surligneur) |
+Sémantique : **bleu sombre = critique/fraude**, **jaune clair = avertissement/escalader**,
+**vert = ok/légitime**. Le rouge n'est pas utilisé.
 
-### Variables CSS
-```css
-:root {
-  --paper-bg: #FDFBF7;
-  --paper-off: #F5F0E6;
-  --ink: #1A1A1A;
-  --pencil: #4A4A4A;
-  --sepia: #D4A574;
-  --kraft: #C4A77D;
-  --stamp-red: #B91C1C;
-  --stamp-green: #15803D;
-  --stamp-amber: #B45309;
-  --highlight: #FEF3C7;
-}
-```
+| Rôle | Hex |
+|---|---|
+| Canvas (fond app) | `#F2F4F7` |
+| Surface (cartes) | `#FFFFFF` |
+| Bordure | `#E4E7EC` |
+| Bordure forte | `#D0D5DD` |
+| Texte principal | `#101828` |
+| Texte secondaire | `#475467` |
+| Texte tertiaire | `#98A2B3` |
+
+### Couleurs sémantiques (badges, jauge, boutons)
+
+| Niveau | Texte (fg) | Fond (bg) | Bordure | Accent/jauge |
+|---|---|---|---|---|
+| Critique (fraude, risque élevé) | `#1E3A8A` | `#EFF4FF` | `#C7D7FE` | `#1E40AF` |
+| Avertissement (escalader, risque moyen) | `#854D0E` | `#FEFCE8` | `#FDE68A` | `#CA8A04` |
+| OK (légitime, risque faible) | `#067647` | `#ECFDF3` | `#ABEFC6` | `#17B26A` |
 
 ---
 
 ## Typographie
 
-**Une seule famille : Space Mono.** Brutalist Raw aesthetic — vibe "rapport tapé à la machine d'enquête". Mono partout = précision data + authenticité.
+| Usage | Police |
+|---|---|
+| Texte, titres, UI | **Inter** (400/500/600/700) |
+| Chiffres, IDs, montants, scores | **IBM Plex Mono** (tabular-nums) |
 
-### Import
+Import :
 ```css
-@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 ```
-
-### Hiérarchie
-| Élément | Taille | Poids | Letter-spacing |
-|---|---|---|---|
-| Titre dossier (DOSSIER #042) | 20px | 700 | 0.05em |
-| Section header (PIÈCES À CONVICTION) | 13px | 700 uppercase | 0.1em |
-| Labels (SUSPECT, MONTANT, SCORE) | 12px | 400 uppercase | 0.08em |
-| Valeurs principales | 16px | 700 | normal |
-| Texte verdict IA | 14px | 400 | normal |
-| Métadonnées (dates, IDs) | 12px | 400 | normal |
-| Tampons | 24px | 700 uppercase | 0.15em |
 
 ---
 
-## Textures
+## Iconographie
 
-### Grain papier (subtle)
-Overlay SVG noise sur le fond, 12% opacity. Donne l'impression d'un papier scanné, pas d'un écran propre.
+Icônes **Lucide** en SVG inline (stroke `currentColor`, width 2). Jamais d'emoji.
 
-```css
-body {
-  background-color: var(--paper-bg);
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' /%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.12'/%3E%3C/svg%3E");
-}
-```
-
-### Bordure crénelée (ticket style)
-Headers de carte avec bordure dentelée pour évoquer un coupon administratif.
+| Sens | Icône Lucide |
+|---|---|
+| Signal critique | `x-circle` |
+| Signal avertissement | `alert-triangle` |
+| Signal ok | `check-circle` |
+| Carte bancaire (avatar) | `credit-card` |
+| Actions | `arrow-left` / `arrow-up` / `arrow-right` |
 
 ---
 
 ## Composant : Carte Dossier
 
-### Anatomie (top → bottom)
-1. **Header crénelé** (`#F5F0E6`) — "DOSSIER #042  •  42/67 traités"
-2. **Bloc identité** — labels mono + valeurs alignées sur grille
-3. **Score bar** — barre ASCII `▰▰▰▰▰▰▰▰▰░ 0.91`
-4. **Séparateur tiret** — `─── VERDICT IA ───`
-5. **Verdict IA** (Claude) — paragraphe naturel, 3-4 lignes max
-6. **Séparateur** — `─── PIÈCES À CONVICTION ───`
-7. **Pièces à conviction** — liste à puces avec marqueurs `✗` (rouge) `⚠` (ambre) `✓` (vert)
-8. **Séparateur** — `─── 5 DERNIÈRES TRANSACTIONS ───`
-9. **Timeline** — tableau mono des transactions précédentes de la carte
-10. **Footer actions** — boutons + raccourcis clavier annoncés
+Surface blanche, `border-radius: 16px`, ombre douce en couches. Anatomie
+(haut → bas) :
 
-### Dimensions
-- Largeur carte : `min(640px, 90vw)`
-- Padding interne : `32px`
-- Bordure : `1px solid var(--sepia)`
-- Box-shadow : `0 2px 0 var(--pencil), 0 4px 12px rgba(0,0,0,0.08)` (subtle paper drop)
+1. **Header** — avatar (icône carte) + `Dossier #ID` + compteur + **pill de risque** (couleur selon score)
+2. **Métriques** — cartes « Carte » / « Montant » + **jauge de score** (barre colorée selon risque)
+3. **Analyse IA** — callout sobre (bordure gauche bleue) avec le verdict en langage naturel
+4. **Signaux détectés** — lignes `icône · label · valeur (mono) · badge` (couleur par sévérité)
+5. **Historique récent** — table des transactions précédentes, ligne courante surlignée (bleu)
 
-### Pile derrière
-2-3 cartes en `position: absolute` derrière la carte principale, `translateY(8px) translateX(4px) rotate(0.5deg)`, z-index décroissant, opacity 0.6/0.3. Donne l'impression "il en reste à traiter".
+Tokens : voir `src/ui/case_card.py` (constante `CARD_CSS`, fonction `render_card_inner`).
 
 ---
 
-## Comportement : Swipe Tinder
+## Interaction : file de révision swipable
 
-### Inputs
-| Geste | Clavier | Résultat |
-|---|---|---|
-| Swipe gauche | `←` ou `A` | Classer fraude (rouge) |
-| Swipe droite | `→` ou `D` | Innocenter (vert) |
-| Swipe haut | `↑` ou `E` | Escalader (ambre) |
-| Annuler | `Z` | Undo (carte précédente revient) |
+Implémentée dans `src/ui/swipe_deck.py` (JS vanilla dans une iframe `components.html`).
 
-### Animation de sortie
-- **Gauche** : `transform: translateX(-120%) rotate(-15deg); opacity: 0;` en 400ms
-- **Droite** : `transform: translateX(120%) rotate(15deg); opacity: 0;` en 400ms
-- **Haut** : `transform: translateY(-120%); opacity: 0;` en 400ms
-- Easing : `cubic-bezier(0.4, 0.0, 0.2, 1)`
+| Geste | Clavier | Décision | Couleur |
+|---|---|---|---|
+| Swipe gauche | `A` / `←` | Fraude | bleu `#1E40AF` |
+| Swipe haut | `E` / `↑` | Escalader | jaune `#CA8A04` |
+| Swipe droite | `D` / `→` | Légitime | vert `#17B26A` |
+| — | `Z` | Annuler la dernière décision | — |
 
-### Tampon stamp
-Pendant la sortie, un grand tampon (24px uppercase, border 4px, rotate -12deg, opacity 0.85) apparaît au centre de la carte avant qu'elle ne disparaisse :
-- `FRAUDE` (rouge) sur swipe gauche
-- `INNOCENT` (vert) sur swipe droite
-- `ESCALADÉ` (ambre) sur swipe haut
-
-### Drag souris/touch (Phase 2)
-Implémenter via JS dans le composant HTML iframe. Pointer events `pointerdown/pointermove/pointerup`. Seuil de swipe : 30% de la largeur écran OU vélocité > 0.5 px/ms.
+- **Pile** : 2 cartes fantômes décalées derrière la carte active.
+- **Drag** : `translate` + légère rotation ; un voile coloré + un label apparaissent selon la direction et l'intensité.
+- **Seuil** : relâchée au-delà de 110 px → la carte s'envole ; sinon retour en place.
+- **Undo** : la carte revient depuis le côté de sa sortie.
+- **Fin de file** : écran récapitulatif (compteur par décision) + export CSV + recommencer.
 
 ---
 
-## Accessibilité (CRITICAL)
+## Accessibilité
 
-- **Tab order** matches visual order (top → bottom → footer buttons)
-- **Focus rings** visibles : `outline: 2px solid var(--ink); outline-offset: 2px;`
-- **Raccourcis clavier** affichés en permanence dans le footer
-- **Contraste** : Ink (`#1A1A1A`) sur Paper (`#FDFBF7`) → 17.4:1 (AAA)
-- **prefers-reduced-motion** : swipe devient un fade instantané sans translate
-- **ARIA labels** sur les boutons (icon-only friendly)
-- **Cursor pointer** sur tous les éléments cliquables
+- Contraste texte principal `#101828` sur `#FFFFFF` ≈ 16:1 (AAA).
+- Focus visible : `outline: 2px solid #1E40AF; outline-offset: 2px;`.
+- Toutes les actions sont accessibles au clavier (A/D/E/Z + flèches) **et** à la souris (boutons).
+- Le drag (pointer events) est une amélioration ; boutons + clavier restent le chemin principal.
+- Les valeurs longues tronquent en ellipse (jamais de débordement).
 
 ---
 
 ## Stack technique
 
-### Libs Streamlit
-- `streamlit-shortcuts` — raccourcis clavier A/D/E/Z
-- `st.components.v1.html` — iframe pour la carte avec animation JS
-- `st.session_state` — état (index courant, historique décisions)
+- **Streamlit** + `st.components.v1.html` (iframe isolée) pour la carte/deck.
+- Tout le HTML/CSS/JS de la carte est **self-contained** dans l'iframe.
+- `streamlit-shortcuts` disponible si l'on doit remonter des raccourcis au niveau Streamlit (non requis pour le deck, qui gère son propre clavier).
+- Pas de framework JS, pas de build : JS vanilla.
 
 ### Anti-patterns techniques
-- Pas de `streamlit-shadcn-ui` (vibe trop moderne)
-- Pas de `plotly` pour la timeline (overkill, on fait du HTML/CSS pur)
-- Pas de `streamlit-card` (pas assez customizable pour notre design)
+- Pas de `plotly` pour l'historique (HTML/CSS pur suffit).
+- Pas de composants Streamlit « lourds » qui imposeraient un autre langage visuel.
 
 ---
 
 ## Pre-delivery checklist
 
-- [ ] Police Space Mono chargée et fallback `monospace`
-- [ ] Grain papier visible mais discret (12% max)
-- [ ] Tampons rotate -12deg, jamais 0deg
-- [ ] Animation swipe respecte `prefers-reduced-motion`
-- [ ] Focus ring visible sur tab navigation
-- [ ] Boutons keyboard shortcuts annoncés (label visuel)
-- [ ] Contraste text ink sur paper > 4.5:1 (testé)
-- [ ] Pile derrière visible (2-3 cartes fantômes)
-- [ ] Undo fonctionne sur la dernière décision
-- [ ] Test responsive : carte centrée à 1440px et 1024px (pas obligé < 768px)
+- [ ] Inter + IBM Plex Mono chargées (fallback `sans-serif` / `monospace`)
+- [ ] Aucune icône emoji (Lucide SVG uniquement)
+- [ ] Palette respectée : bleu/jaune/vert, pas de rouge ni de violet
+- [ ] Focus visible au clavier
+- [ ] Boutons ET clavier ET drag fonctionnent
+- [ ] Undo activé seulement s'il y a un historique
+- [ ] Valeurs longues tronquées (pas de débordement)
+- [ ] État vide géré (file sans dossier)
+- [ ] Carte centrée et lisible de 1024 px à 1440 px
 
 ---
 
-## Pages overrides
+## Historique des directions
 
-À ajouter dans `design-system/fraud-hunter/pages/` si besoin de spécificités :
-- `case-view.md` — la carte d'enquête (le principal écran)
-- `intake.md` — l'écran d'upload du CSV
-- `summary.md` — l'écran de fin (récap décisions)
+- **v1–v2 (abandonnée)** : « paper detective » — chemise manille, tampons, post-it manuscrit, swipe Tinder ludique. Jugée trop *cartoon* / pas assez pro.
+- **v3+ (actuelle)** : refonte professionnelle (ce document). Le swipe est conservé mais en version sobre.
