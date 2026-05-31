@@ -94,43 +94,48 @@ Pour chaque dossier, l'analyste choisit une décision parmi :
 | Légitime | `"legit"` | swipe droite / `D` / `→` |
 
 Aujourd'hui, les décisions sont accumulées **côté client** (dans l'iframe) et
-exportables en CSV depuis l'écran de fin :
-
-```csv
-case_id,decision
-0142,fraud
-0143,fraud
-0144,legit
-...
-```
+exportables en **JSON** depuis l'écran de fin (voir plus bas).
 
 ### Boucle de feedback — partie LIVE (côté client, faite)
 
-Implémentée dans `swipe_deck.py`. En session, quand le réviseur **innocente 2
-dossiers d'une même `merchant_category`**, l'UI juge la catégorie « fiable » et
-**dépriorise les flags similaires restants** (drapeau sur la carte + bannière +
-ligne dans le dashboard). Entièrement recalculé depuis l'état → cohérent avec
-l'undo. Aucune dépendance backend.
+Implémentée dans `swipe_deck.py`. **Elle apprend dans les deux sens**, par
+`merchant_category` (clé fournie par le `CaseFile`) :
 
-### Boucle de feedback — partie EXPORT vers Python (à brancher)
+| Déclencheur (en session) | Effet sur les dossiers similaires restants |
+|---|---|
+| **2 « légitime »** d'une même catégorie | catégorie jugée **fiable** → flags similaires **dépriorisés** (drapeau vert, carte atténuée) |
+| **2 « fraude »** d'une même catégorie | catégorie **à risque confirmé** → flags similaires **remontés en priorité** (drapeau rouge) |
 
-Pour que `audit.py` + `FeedbackManager` enregistrent aussi côté serveur, l'UI
-exposera en fin de file la liste des décisions :
+> ⚠️ Important : c'est le sens **fraude** qui rend la boucle visible dans une
+> file de fraude réelle (le réviseur clique surtout « Fraude »). Le sens
+> légitime sert à faire taire les faux positifs récurrents.
 
-```python
-{
-  "case_id": "tx_000998",
-  "card_id": "card_046",        # repris du CaseFile
-  "decision": "fraud",          # "fraud" | "escalate" | "legit"
-  "score": 0.75,                # score initial, repris du CaseFile
-  "category": "online_retail",  # merchant_category
-  "auto": false                 # true si dépriorisé automatiquement par l'apprentissage
-}
+Une **bannière** (verte = fiable / rouge = à risque) et une ligne du **tableau
+de bord** reflètent l'état. Tout est **recalculé depuis l'état** (décisions +
+position) à chaque changement → automatiquement cohérent avec l'undo. Seuils :
+`TRUST_LEGIT = TRUST_FRAUD = 2`. Aucune dépendance backend.
+
+### Boucle de feedback — partie EXPORT / IMPORT vers Python (faite)
+
+À la fin de la file, l'UI exporte un **rapport JSON** (`decisions.json`) :
+
+```json
+[
+  {
+    "case_id": "tx_000998",
+    "card_id": "card_046",
+    "score": 0.75,
+    "category": "online_retail",
+    "decision": "fraud"          // "fraud" | "escalate" | "legit" | null
+  }
+]
 ```
 
-`audit.py` (P4) consigne ces entrées ; `FeedbackManager.record_decision()`
-(P2/P4) peut les rejouer. Le transport iframe → Streamlit reste à brancher
-(composant bidirectionnel ou import du CSV/JSON exporté).
+Côté serveur, `app.py` (`render_decision_importer`) le réimporte via un
+`st.file_uploader` et le rejoue : `FeedbackManager.record_decision()` met à jour
+les modificateurs (legit→`Innocenter`, fraud→`Classer`) et `audit.log_decision()`
+persiste l'audit log. Le transport est donc un **export → upload** (robuste,
+sans dépendance) plutôt qu'un pont iframe→Streamlit automatique.
 
 ---
 

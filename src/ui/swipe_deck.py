@@ -5,14 +5,27 @@ Rend une pile de dossiers dans une seule iframe. Toute l'interaction (drag,
 clavier, undo, fin de file) est gérée côté client en JS vanilla, ce qui donne
 un swipe fluide sans rerun Streamlit par carte.
 
+Disposition :
+    - une barre d'onglets (Révision / Tableau de bord) en haut ;
+    - la barre d'actions est placée AU-DESSUS de la carte (toujours visible,
+      pas besoin de scroller) ;
+    - la pile de cartes en dessous.
+
 Gestes :
-    ← / A   classer fraude     (voile bleu)
-    → / D   marquer légitime   (voile vert)
-    ↑ / E   escalader          (voile jaune)
+    ← / A   classer fraude
+    → / D   marquer légitime
+    ↑ / E   escalader
     Z       annuler la dernière décision
 
-Les décisions sont accumulées côté client et exportables en CSV depuis l'écran
-de fin. Le pont vers le backend Python (audit.py / feedback.py) viendra ensuite.
+Boucle de feedback (en session, recalculée depuis l'état → compatible undo) :
+    - 2 « légitime » sur une même catégorie  → catégorie jugée FIABLE :
+      les flags similaires restants sont dépriorisés (drapeau vert, carte atténuée) ;
+    - 2 « fraude » sur une même catégorie     → catégorie à RISQUE CONFIRMÉ :
+      les flags similaires restants sont remontés en priorité (drapeau rouge).
+    Une bannière (verte ou rouge) et une ligne du dashboard reflètent l'état.
+
+Les décisions sont exportables en JSON depuis l'écran de fin (rapport d'audit) ;
+elles peuvent être réimportées côté serveur (voir app.py / audit.py / feedback.py).
 """
 from __future__ import annotations
 
@@ -66,16 +79,20 @@ body { padding: 18px 16px 28px; }
   background: rgba(255,255,255,0.86);
 }
 
-/* Panneau de contrôles sous la pile */
+/* Barre de contrôles — placée AU-DESSUS de la pile (boutons toujours visibles) */
 .deck-controls {
   width: 100%;
   background: var(--c-surface);
   border: 1px solid var(--c-border);
   border-radius: 14px;
-  padding: 16px 18px 18px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
   box-shadow: 0 1px 2px rgba(16,24,40,0.04), 0 8px 16px -8px rgba(16,24,40,0.08);
 }
-.deck-progress { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+/* Dans la barre du haut : boutons d'abord, puis méta (progression) */
+.deck-controls .actions { margin-bottom: 12px; }
+.deck-controls .shortcuts { margin-bottom: 14px; }
+.deck-progress { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .deck-progress .label { font-size: 12px; font-weight: 600; color: var(--c-text-2); }
 .deck-progress .count { font-family: var(--font-mono); font-size: 12px; color: var(--c-text-3); }
 .progress-track { height: 6px; border-radius: 999px; background: #EAECF0; overflow: hidden; margin-bottom: 16px; }
@@ -104,20 +121,22 @@ body { padding: 18px 16px 28px; }
 .done-stat .k { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--c-text-3); margin-top: 4px; }
 .done-actions { display: flex; gap: 10px; justify-content: center; }
 
-/* Sélecteur de vue (segmented control) */
+/* Barre de navigation (onglets rectangulaires) */
 .view-toggle {
-  display: inline-flex; background: #EAECF0; border-radius: 10px;
-  padding: 3px; margin-bottom: 14px;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px;
 }
 .seg {
-  border: none; background: transparent; cursor: pointer;
-  font-family: var(--font-sans); font-size: 13px; font-weight: 600;
-  color: var(--c-text-2); padding: 7px 16px; border-radius: 8px;
-  transition: background-color 140ms ease, color 140ms ease;
+  display: flex; align-items: center; justify-content: center; gap: 9px;
+  border: 1px solid var(--c-border); background: var(--c-surface); cursor: pointer;
+  font-family: var(--font-sans); font-size: 14px; font-weight: 600;
+  color: var(--c-text-2); padding: 13px 14px; border-radius: 12px;
+  transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
 }
+.seg svg { width: 18px; height: 18px; flex-shrink: 0; }
+.seg:hover:not(.active) { background: #FCFCFD; border-color: var(--c-border-strong); }
 .seg.active {
   background: var(--c-surface); color: var(--c-text);
-  box-shadow: 0 1px 2px rgba(16,24,40,0.08);
+  border-color: #101828; box-shadow: inset 0 0 0 1px #101828, 0 1px 2px rgba(16,24,40,0.08);
 }
 
 /* Tableau de bord */
@@ -153,7 +172,7 @@ body { padding: 18px 16px 28px; }
 .dash-bar-fill { display: block; height: 8px; border-radius: 999px; width: 0%; transition: width 280ms ease; }
 .dash-count { font-family: var(--font-mono); font-size: 14px; font-weight: 600; text-align: right; color: var(--c-text); }
 
-/* Bannière d'apprentissage (feedback loop) */
+/* Bannière d'apprentissage (feedback loop) — vert = fiable, rouge = à risque */
 .learn-banner {
   display: flex; align-items: center; gap: 10px;
   background: #ECFDF3; border: 1px solid #ABEFC6; border-radius: 10px;
@@ -162,20 +181,23 @@ body { padding: 18px 16px 28px; }
   animation: learn-in 280ms ease;
 }
 .learn-banner[hidden] { display: none; }   /* sinon display:flex écrase l'attribut hidden */
+.learn-banner.risk { background: #FEF3F2; border-color: #FECDCA; color: #B42318; }
 .learn-banner .lb-icon { flex-shrink: 0; width: 16px; height: 16px; }
 @keyframes learn-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
 
-/* Drapeau "appris" sur une carte dépriorisée */
-.learned-flag {
+/* Drapeaux "appris" sur une carte à venir */
+.learned-flag, .learned-flag-risk {
   display: none;
   position: absolute; top: 0; left: 0; right: 0; z-index: 5;
-  background: #ECFDF3; border-bottom: 1px solid #ABEFC6;
-  color: #067647; font-size: 11px; font-weight: 600;
-  text-align: center; padding: 6px 10px;
-  border-radius: 16px 16px 0 0;
+  font-size: 11px; font-weight: 600; text-align: center;
+  padding: 6px 10px; border-radius: 16px 16px 0 0;
 }
+.learned-flag      { background: #ECFDF3; border-bottom: 1px solid #ABEFC6; color: #067647; }
+.learned-flag-risk { background: #FEF3F2; border-bottom: 1px solid #FECDCA; color: #B42318; }
 .swipe-card.learned-legit .learned-flag { display: block; }
 .swipe-card.learned-legit .card { opacity: 0.82; }
+.swipe-card.learned-fraud .learned-flag-risk { display: block; }
+.swipe-card.learned-fraud .card { box-shadow: 0 0 0 2px #FDA29B, 0 20px 32px -12px rgba(16,24,40,0.10); }
 
 /* Ligne d'apprentissage dans le dashboard */
 .dash-learn {
@@ -183,6 +205,7 @@ body { padding: 18px 16px 28px; }
   padding: 10px 14px; margin-bottom: 22px;
   font-size: 12px; color: #067647; font-weight: 500;
 }
+.dash-learn.risk { background: #FEF3F2; border-color: #FECDCA; color: #B42318; }
 """
 
 
@@ -196,8 +219,9 @@ DECK_JS = r"""
   };
   const THRESHOLD = 110;
 
-  // Feedback loop : seuil d'innocentements pour juger une catégorie "fiable"
-  const TRUST_LEGIT = 2;
+  // Feedback loop : seuils d'apprentissage par catégorie
+  const TRUST_LEGIT = 2;   // 2 "légitime" => catégorie jugée fiable (dépriorise)
+  const TRUST_FRAUD = 2;   // 2 "fraude"    => catégorie à risque confirmé (remonte)
   const CAT_LABELS = {
     online_retail: 'Achat en ligne', electronics: 'Électronique',
     gift_card: 'Carte-cadeau', travel: 'Voyage', restaurant: 'Restaurant',
@@ -279,48 +303,64 @@ DECK_JS = r"""
   // Recalculé entièrement depuis l'état (decisions + cur) à chaque changement,
   // donc automatiquement cohérent avec l'undo.
   function recomputeLearning() {
-    const legitByCat = {};
+    // Compte les décisions par catégorie (les deux sens)
+    const legitByCat = {}, fraudByCat = {};
     for (let i = 0; i < cur; i++) {
-      if (decisions[i] === 'legit') {
-        const c = cards[i].getAttribute('data-category') || '';
-        if (c) legitByCat[c] = (legitByCat[c] || 0) + 1;
-      }
+      const c = cards[i].getAttribute('data-category') || '';
+      if (!c) continue;
+      if (decisions[i] === 'legit') legitByCat[c] = (legitByCat[c] || 0) + 1;
+      else if (decisions[i] === 'fraud') fraudByCat[c] = (fraudByCat[c] || 0) + 1;
     }
+    const risky   = Object.keys(fraudByCat).filter(c => fraudByCat[c] >= TRUST_FRAUD);
     const trusted = Object.keys(legitByCat).filter(c => legitByCat[c] >= TRUST_LEGIT);
 
-    // réinitialise puis tague les dossiers à venir (i > cur) des catégories fiables
-    let demoted = 0;
-    for (let i = 0; i < total; i++) cards[i].classList.remove('learned-legit');
+    // Tague les dossiers à venir (i > cur) : le risque confirmé prime sur la confiance
+    let demoted = 0, surfaced = 0;
+    for (let i = 0; i < total; i++) cards[i].classList.remove('learned-legit', 'learned-fraud');
     for (let i = cur + 1; i < total; i++) {
       const c = cards[i].getAttribute('data-category') || '';
-      if (trusted.indexOf(c) !== -1) {
+      if (risky.indexOf(c) !== -1) {
+        cards[i].classList.add('learned-fraud');
+        surfaced += 1;
+      } else if (trusted.indexOf(c) !== -1) {
         cards[i].classList.add('learned-legit');
         demoted += 1;
       }
     }
 
+    const alertIcon = '<svg class="lb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>';
     const checkIcon = '<svg class="lb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>';
-    const names = trusted.map(prettyCat).join(', ');
+    const riskyNames   = risky.map(prettyCat).join(', ');
+    const trustedNames = trusted.map(prettyCat).join(', ');
+
+    // Le message rouge (risque confirmé) prime ; sinon vert (fiable)
+    let bannerHTML = '', bannerRisk = false, dashText = '', dashRisk = false, show = false;
+    if (risky.length) {
+      bannerHTML = alertIcon + 'À risque confirmé : ' + riskyNames + ' — '
+        + surfaced + ' flag(s) similaire(s) remonté(s) en priorité.';
+      bannerRisk = true; show = true;
+      dashText = 'Apprentissage actif : ' + riskyNames + ' jugée(s) à risque — '
+        + surfaced + ' flag(s) restant(s) à vérifier en priorité.';
+      dashRisk = true;
+    } else if (trusted.length) {
+      bannerHTML = checkIcon + 'Appris : ' + trustedNames + ' jugée(s) fiable(s) — '
+        + demoted + ' flag(s) similaire(s) dépriorisé(s).';
+      show = true;
+      dashText = 'Apprentissage actif : ' + trustedNames + ' jugée(s) fiable(s) — '
+        + demoted + ' flag(s) restant(s) dépriorisé(s).';
+    }
 
     const banner = document.getElementById('learnBanner');
     if (banner) {
-      if (trusted.length) {
-        banner.innerHTML = checkIcon + 'Appris : ' + names + ' jugée(s) fiable(s) — '
-          + demoted + ' flag(s) similaire(s) dépriorisé(s).';
-        banner.hidden = false;
-      } else {
-        banner.hidden = true;
-      }
+      banner.classList.toggle('risk', bannerRisk);
+      if (show) { banner.innerHTML = bannerHTML; banner.hidden = false; }
+      else { banner.hidden = true; }
     }
     const dl = document.getElementById('dashLearn');
     if (dl) {
-      if (trusted.length) {
-        dl.textContent = 'Apprentissage actif : ' + names
-          + ' jugée(s) fiable(s) — ' + demoted + ' flag(s) restant(s) dépriorisé(s).';
-        dl.hidden = false;
-      } else {
-        dl.hidden = true;
-      }
+      dl.classList.toggle('risk', dashRisk);
+      if (show) { dl.textContent = dashText; dl.hidden = false; }
+      else { dl.hidden = true; }
     }
   }
 
@@ -638,6 +678,7 @@ def render_swipe_deck(cases: list[CaseFile]) -> str:
         f"""
         <div class="swipe-card" data-index="{i}" data-id="{case.case_id}" data-card="{case.card_id}" data-score="{case.score:.4f}" data-risk="{_risk_key(case.risk_label)}" data-category="{case.merchant_category}">
           <div class="learned-flag">Catégorie jugée fiable — priorité réduite</div>
+          <div class="learned-flag-risk">Catégorie à risque confirmé — à vérifier en priorité</div>
           {render_card_inner(case)}
           <div class="tint"></div>
           <div class="decision-label"></div>
@@ -655,26 +696,33 @@ def render_swipe_deck(cases: list[CaseFile]) -> str:
   <div class="deck-wrap">
 
     <div class="view-toggle">
-      <button class="seg active" type="button" data-view="deck">Révision</button>
-      <button class="seg" type="button" data-view="dashboard">Tableau de bord</button>
+      <button class="seg active" type="button" data-view="deck">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+        Révision
+      </button>
+      <button class="seg" type="button" data-view="dashboard">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="20" y2="10"/><line x1="18" x2="18" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="16"/></svg>
+        Tableau de bord
+      </button>
     </div>
 
     <div id="deckView">
 
       <div class="learn-banner" id="learnBanner" hidden></div>
 
-      <div class="stage" id="stage">
-        {cards_html}
-      </div>
-
+      <!-- Barre de contrôles EN HAUT : actions toujours visibles, sans scroll -->
       <div class="deck-controls" id="deckControls">
+        {controls}
         <div class="deck-progress">
           <span class="label" id="progressLabel">Dossier 1</span>
           <span class="count" id="progressCount">0 / {len(cases)}</span>
         </div>
         <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
-        {controls}
         <button id="undoBtn" class="btn btn-undo" type="button" disabled>Annuler la dernière décision (Z)</button>
+      </div>
+
+      <div class="stage" id="stage">
+        {cards_html}
       </div>
 
       <div class="deck-done" id="deckDone" hidden>
