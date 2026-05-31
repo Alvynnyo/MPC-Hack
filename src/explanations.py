@@ -86,6 +86,10 @@ def generate_explanation(ctx: FlagContext) -> str:
 
     anomalies_str = " - " + "\n - ".join(anomalies) if anomalies else " - Accumulation de signaux faibles suspects."
 
+    # Sans clé API : repli immédiat (évite un appel réseau voué à l'échec par dossier)
+    if not os.getenv("GEMINI_API_KEY"):
+        return f"Alerte système : Transaction suspecte (Score global {ctx.fraud_score:.2f}). {anomalies_str}"
+
     prompt = f"""
     Tu es un analyste en prévention de la fraude financière senior.
     Rédige un verdict concis (2 ou 3 phrases maximum) expliquant pourquoi la transaction suivante est suspecte.
