@@ -29,6 +29,9 @@ Thumbs.db
 # Audit logs (générés à l'exécution)
 audit_log.json
 
+# Cache des explications IA (régénéré au besoin)
+data/explanations_cache.json
+
 # Outputs (sauf le CSV final attendu en livrable)
 *.tmp
 *.log

@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import os
+import json
 import logging
+from pathlib import Path
 from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import google.generativeai as genai
 from dotenv import load_dotenv
-
-import time
 
 # --- Configuration Initiale ---
 # Chargement des variables du fichier .env
@@ -20,6 +20,28 @@ genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 # gemini-1.5-flash est l'équivalent de claude-haiku : extrêmement rapide et peu coûteux
 MODEL_NAME = 'gemini-2.5-flash'
+
+# Cache disque des explications (clé = transaction_id) : un dossier déjà expliqué
+# n'est jamais re-soumis à l'API → démarrages quasi instantanés au-delà du 1er run.
+CACHE_PATH = Path("data/explanations_cache.json")
+_FALLBACK_PREFIXES = ("Alerte système", "Erreur")
+
+
+def _load_cache() -> dict[str, str]:
+    if not CACHE_PATH.exists():
+        return {}
+    try:
+        return json.loads(CACHE_PATH.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def _save_cache(cache: dict[str, str]) -> None:
+    try:
+        CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        CACHE_PATH.write_text(json.dumps(cache, ensure_ascii=False, indent=2), encoding="utf-8")
+    except OSError as exc:
+        logging.warning("Impossible d'écrire le cache d'explications : %s", exc)
 
 
 @dataclass
@@ -90,31 +112,46 @@ def generate_explanation(ctx: FlagContext) -> str:
         return f"Alerte système : Transaction suspecte (Score global {ctx.fraud_score:.2f}). {anomalies_str}"
 
 
-def precompute_explanations(flagged_contexts: list[FlagContext], max_workers: int = 3) -> dict[str, str]:
+def precompute_explanations(flagged_contexts: list[FlagContext], max_workers: int = 4) -> dict[str, str]:
     """
-    Génère les explications. max_workers réduit à 3 pour éviter le Rate Limit de l'API.
+    Génère les explications en parallèle, avec cache disque.
+
+    - Les dossiers déjà en cache ne rappellent pas l'API (démarrage instantané).
+    - Seuls les vrais succès sont mis en cache (jamais les verdicts de repli),
+      pour qu'ajouter une clé API plus tard régénère de vraies explications.
     """
-    results = {}
+    results: dict[str, str] = {}
     if not flagged_contexts:
         return results
 
-    print(f"Génération IA pour {len(flagged_contexts)} transactions... (Mode anti-rate-limit activé)")
+    cache = _load_cache()
+    todo = []
+    for ctx in flagged_contexts:
+        cached = cache.get(ctx.transaction_id)
+        if cached:
+            results[ctx.transaction_id] = cached
+        else:
+            todo.append(ctx)
 
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_txid = {
-            executor.submit(generate_explanation, ctx): ctx.transaction_id 
-            for ctx in flagged_contexts
-        }
-
-        for future in as_completed(future_to_txid):
-            tx_id = future_to_txid[future]
-            try:
-                results[tx_id] = future.result()
-                # Petite pause pour éviter de bombarder l'API
-                time.sleep(1.5) 
-            except Exception as exc:
-                logging.error(f"Échec pour {tx_id}: {exc}")
-                results[tx_id] = "Erreur lors de la génération."
+    if todo:
+        print(f"Génération IA pour {len(todo)} transactions (cache: {len(results)})...")
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_txid = {
+                executor.submit(generate_explanation, ctx): ctx.transaction_id
+                for ctx in todo
+            }
+            for future in as_completed(future_to_txid):
+                tx_id = future_to_txid[future]
+                try:
+                    text = future.result()
+                except Exception as exc:
+                    logging.error(f"Échec pour {tx_id}: {exc}")
+                    text = "Erreur lors de la génération."
+                results[tx_id] = text
+                # ne met en cache que les vraies explications (pas les replis)
+                if not text.startswith(_FALLBACK_PREFIXES):
+                    cache[tx_id] = text
+        _save_cache(cache)
 
     return results
 
