@@ -612,7 +612,7 @@ DECK_JS = r"""
     const blob = new Blob([payload], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'decisions.json';
+    a.download = 'audit_log.json.json';
     a.click();
   });
 
