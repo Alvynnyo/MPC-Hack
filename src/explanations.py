@@ -8,6 +8,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import google.generativeai as genai
 from dotenv import load_dotenv
 
+import time
+
 # --- Configuration Initiale ---
 # Chargement des variables du fichier .env
 load_dotenv()
@@ -40,74 +42,65 @@ class FlagContext:
     layer_scores: dict  # {"amount": s1, "velocity": s2, "burst": s3, "cross_card": s4}
 
 
+
 def generate_explanation(ctx: FlagContext) -> str:
     """
-    Appelle Gemini API et retourne une explication en français, 2-3 phrases,
-    qui raconte pourquoi cette transaction est suspecte.
+    Appelle Gemini API et retourne une explication en français, 2-3 phrases.
     """
-    # 1. Préparation du contexte (On ne donne à l'IA que ce qui est utile)
+    # 1. Préparation du contexte BASSÉE SUR LES SCORES DE P1
     anomalies = []
-    if ctx.amount > ctx.median_amount_for_card * 2:
-        anomalies.append(f"Montant ({ctx.amount}$) très supérieur à la médiane ({ctx.median_amount_for_card}$).")
-    if ctx.device_is_new:
-        anomalies.append("Nouvel appareil utilisé.")
-    if ctx.ip_is_new:
-        anomalies.append("Nouvelle adresse IP.")
+    
+    if ctx.layer_scores.get("amount", 0) > 0.5:
+        anomalies.append(f"Montant anormalement élevé pour cette carte (Anomalie: {ctx.layer_scores['amount']:.2f}).")
+        
+    if ctx.layer_scores.get("velocity", 0) > 0.5 or ctx.layer_scores.get("burst", 0) > 0.5:
+        anomalies.append("Rafale de transactions détectée dans un laps de temps anormalement court.")
+        
+    if ctx.layer_scores.get("cross_card", 0) > 0.5:
+        anomalies.append("Forte probabilité de fraude croisée (Dispositif ou IP associé à de multiples cartes).")
+
     if ctx.merchant_country != ctx.cardholder_country:
-        anomalies.append(f"Pays du marchand ({ctx.merchant_country}) différent de celui de la carte ({ctx.cardholder_country}).")
-    if ctx.device_seen_with_n_cards > 1:
-        anomalies.append(f"Appareil déjà vu sur {ctx.device_seen_with_n_cards} cartes distinctes (Risque de fraude croisée).")
+        anomalies.append(f"Transaction internationale suspecte : marchand en {ctx.merchant_country}, carte en {ctx.cardholder_country}.")
 
-    anomalies_str = " - " + "\n - ".join(anomalies) if anomalies else " - Comportement atypique général."
+    anomalies_str = " - " + "\n - ".join(anomalies) if anomalies else " - Accumulation de signaux faibles suspects."
 
-    # 2. Construction du prompt (Prompt Engineering)
-    # On force un rôle (System Prompt implicite) et un format très strict.
     prompt = f"""
-Tu es un analyste en prévention de la fraude financière senior.
-Rédige un verdict concis (2 ou 3 phrases maximum) expliquant pourquoi la transaction suivante est suspecte.
-Le ton doit être professionnel, factuel et direct. Ne fais pas d'introduction (ne dis pas "Cette transaction est suspecte car...").
-Va droit au but.
+    Tu es un analyste en prévention de la fraude financière senior.
+    Rédige un verdict concis (2 ou 3 phrases maximum) expliquant pourquoi la transaction suivante est suspecte.
+    Le ton doit être professionnel, factuel et direct. Va droit au but.
 
-DONNÉES DE LA TRANSACTION :
-- Transaction ID : {ctx.transaction_id}
-- Marchand : {ctx.merchant_name} (Catégorie: {ctx.merchant_category})
-- Canal : {ctx.channel}
-- Score de risque global : {ctx.fraud_score:.2f} / 1.0
+    DONNÉES DE LA TRANSACTION :
+    - Transaction ID : {ctx.transaction_id}
+    - Marchand : {ctx.merchant_name} (Catégorie: {ctx.merchant_category})
+    - Canal : {ctx.channel}
 
-ANOMALIES DÉTECTÉES :
-{anomalies_str}
+    ANOMALIES DÉTECTÉES PAR LE MOTEUR :
+    {anomalies_str}
 
-VERDICT :
-"""
+    VERDICT :
+    """
 
-    # 3. Appel à l'API
     try:
         model = genai.GenerativeModel(MODEL_NAME)
-        # On réduit la température pour avoir des réponses factuelles et moins créatives
-        response = model.generate_content(prompt, generation_config={"temperature": 0.2})
+        response = model.generate_content(prompt, generation_config={"temperature": 0.1})
         return response.text.strip()
     
     except Exception as e:
-        # Fallback critique : si l'API plante (timeout, quota), l'interface ne doit pas crasher.
-        logging.error(f"Erreur API Gemini pour la transaction {ctx.transaction_id} : {e}")
-        return f"Alerte générée automatiquement (Score: {ctx.fraud_score:.2f}). Détails indisponibles suite à une erreur réseau."
+        logging.error(f"Erreur API Gemini pour {ctx.transaction_id} : {e}")
+        return f"Alerte système : Transaction suspecte (Score global {ctx.fraud_score:.2f}). {anomalies_str}"
 
 
-def precompute_explanations(flagged_contexts: list[FlagContext], max_workers: int = 10) -> dict[str, str]:
+def precompute_explanations(flagged_contexts: list[FlagContext], max_workers: int = 3) -> dict[str, str]:
     """
-    Génère toutes les explications en batch en utilisant des threads.
-    Retourne un dictionnaire {transaction_id: explication}.
+    Génère les explications. max_workers réduit à 3 pour éviter le Rate Limit de l'API.
     """
     results = {}
-    
     if not flagged_contexts:
         return results
 
-    print(f"Lancement de la génération par lots pour {len(flagged_contexts)} transactions suspectes...")
+    print(f"Génération IA pour {len(flagged_contexts)} transactions... (Mode anti-rate-limit activé)")
 
-    # Utilisation de ThreadPoolExecutor pour paralléliser les appels réseau (I/O bound)
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # Dictionnaire pour garder la trace de quel thread exécute quel contexte
         future_to_txid = {
             executor.submit(generate_explanation, ctx): ctx.transaction_id 
             for ctx in flagged_contexts
@@ -116,13 +109,13 @@ def precompute_explanations(flagged_contexts: list[FlagContext], max_workers: in
         for future in as_completed(future_to_txid):
             tx_id = future_to_txid[future]
             try:
-                explanation = future.result()
-                results[tx_id] = explanation
+                results[tx_id] = future.result()
+                # Petite pause pour éviter de bombarder l'API
+                time.sleep(1.5) 
             except Exception as exc:
-                logging.error(f"La génération a échoué silencieusement pour {tx_id}: {exc}")
-                results[tx_id] = "Erreur lors de la génération de l'explication."
+                logging.error(f"Échec pour {tx_id}: {exc}")
+                results[tx_id] = "Erreur lors de la génération."
 
-    print("Génération par lots terminée.")
     return results
 
 # # --- Test Local (Mock) ---

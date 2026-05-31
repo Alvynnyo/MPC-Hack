@@ -12,7 +12,12 @@ from __future__ import annotations
 import streamlit as st
 import streamlit.components.v1 as components
 
-from src.ui.mock_data import MOCK_CASES
+#from src.ui.mock_data import MOCK_CASES
+from src.ui.swipe_deck import render_swipe_deck
+
+from src.controler import initialize_fraud_queue
+from src.scoring import Weights
+from src.feedback import FeedbackManager
 from src.ui.swipe_deck import render_swipe_deck
 
 
@@ -69,10 +74,28 @@ def main() -> None:
         unsafe_allow_html=True,
     )
 
-    # Deck de dossiers swipables (mocké pour l'instant)
-    deck_html = render_swipe_deck(MOCK_CASES)
-    components.html(deck_html, height=1160, scrolling=False)
+    # --- INITIALISATION DE L'ÉTAT ET DES DONNÉES RÉELLES ---
+    if "feedback" not in st.session_state:
+        st.session_state.feedback = FeedbackManager()
 
+    @st.cache_data(show_spinner=False)
+    def fetch_real_cases(_feedback):
+        return initialize_fraud_queue(
+            csv_path="data/transactions.csv",
+            weights=Weights(w1=0.25, w2=0.25, w3=0.25, w4=0.25),
+            threshold=0.5,
+            feedback_manager=_feedback
+        )
+
+    with st.spinner("Analyse des transactions et verdicts IA en cours..."):
+        cases_queue = fetch_real_cases(st.session_state.feedback)
+
+    if not cases_queue:
+        st.success("File d'attente vide. Aucune fraude détectée.")
+        return
+
+    deck_html = render_swipe_deck(cases_queue)
+    components.html(deck_html, height=1160, scrolling=False)   
 
 if __name__ == "__main__":
     main()
