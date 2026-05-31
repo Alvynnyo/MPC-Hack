@@ -66,7 +66,7 @@ def main() -> None:
     st.set_page_config(
         page_title="Fraud Hunter",
         layout="centered",
-        initial_sidebar_state="collapsed",
+        initial_sidebar_state="expanded",
     )
 
     # Feuille de style globale de l'application (Fond neutre et conteneur centré)
@@ -118,15 +118,28 @@ def main() -> None:
     if "feedback" not in st.session_state:
         st.session_state.feedback = FeedbackManager()
 
-    def fetch_real_cases(_feedback):
+    # --- Réglage cost-aware : seuil de signalement (faux positif vs fraude manquée) ---
+    st.sidebar.markdown("### Réglages")
+    threshold = st.sidebar.slider(
+        "Seuil de signalement",
+        min_value=0.10, max_value=0.60, value=0.28, step=0.01,
+        help="Plus bas : on attrape plus de fraude, mais plus de faux positifs. "
+             "Plus haut : moins de faux positifs, mais on rate plus de fraude.",
+    )
+
+    @st.cache_data(show_spinner=False)
+    def fetch_real_cases(threshold: float, _feedback):
         return initialize_fraud_queue(
             csv_path="data/transactions.csv",
-            threshold=0.28,
-            feedback_manager=_feedback
+            threshold=threshold,
+            feedback_manager=_feedback,
         )
 
-    with st.spinner("Analyse multicouche des transactions et verdicts IA..."):
-        cases_queue = fetch_real_cases(st.session_state.feedback)
+    with st.spinner("Analyse des transactions et verdicts IA en cours..."):
+        cases_queue = fetch_real_cases(threshold, st.session_state.feedback)
+
+    st.sidebar.metric("Transactions signalées", len(cases_queue))
+    st.sidebar.caption("Déplacez le seuil pour voir la file se recalculer en direct.")
 
     if not cases_queue:
         st.success("Félicitations. La file de triage est vide. Aucun risque détecté.")

@@ -13,14 +13,15 @@ from dotenv import load_dotenv
 # --- Configuration Initiale ---
 load_dotenv()
 
-genai.configure(api_key="AQ.Ab8RN6LjPqL7OTz8QSqd9w5ejrs9q4RuM0K8-EBjGJ9wV1kEKA")
+# Configuration de la clé API Gemini
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 MODEL_NAME = 'gemini-2.5-flash'
 
 # Cache disque des explications (clé = transaction_id) : un dossier déjà expliqué
 # n'est jamais re-soumis à l'API → démarrages quasi instantanés au-delà du 1er run.
 CACHE_PATH = Path("data/explanations_cache.json")
-_FALLBACK_PREFIXES = ("Alerte système", "Erreur")
+_FALLBACK_PREFIXES = ("Alerte système", "Erreur", "Pattern identifié")
 
 
 def _load_cache() -> dict[str, str]:
@@ -152,7 +153,7 @@ def _build_pattern_context(ctx: FlagContext) -> tuple[list[str], str]:
 
 def _build_fallback(ctx: FlagContext, anomalies: list[str]) -> str:
     """
-    Fallback lisible si l'API Gemini échoue.
+    Fallback lisible si l'API Gemini échoue ou si aucune clé n'est fournie.
     Zéro score, zéro terme technique interne.
     """
     pattern_labels = {
@@ -186,6 +187,11 @@ def generate_explanation(ctx: FlagContext) -> str:
     anomalies, dominant = _build_pattern_context(ctx)
     anomalies_str = "\n".join(f"- {a}" for a in anomalies)
 
+    # Protection : Si aucune clé API n'est configurée, on passe directement au fallback propre
+    if not os.getenv("GEMINI_API_KEY"):
+        return _build_fallback(ctx, anomalies)
+
+    # Prompt de haute qualité avec tes règles strictes d'analyste senior
     prompt = f"""Tu es un analyste senior en prévention de la fraude financière.
 
 Rédige un verdict de 2 à 3 phrases maximum expliquant POURQUOI cette transaction est suspecte.
@@ -239,7 +245,7 @@ def precompute_explanations(flagged_contexts: list[FlagContext], max_workers: in
     Génère les explications en parallèle, avec cache disque.
 
     - Les dossiers déjà en cache ne rappellent pas l'API (démarrage instantané).
-    - Seuls les vrais succès sont mis en cache (jamais les verdicts de repli),
+    - Seuls les vrais succès sont mis en cache (jamais les verdicts de repli de secours),
       pour qu'ajouter une clé API plus tard régénère de vraies explications.
     """
     results: dict[str, str] = {}
