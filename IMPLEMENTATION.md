@@ -1,65 +1,74 @@
 # Implementation Plan — Fraud Hunter
 
-> **Statut :** Brouillon. À compléter par P4.
-
 ## Stack
 
-- **Langage :** Python 3.11+
-- **Données :** pandas (1000 lignes, en mémoire)
-- **Détection :** scoring statistique, pas de ML
-- **UI :** Streamlit (rapide à construire, navigation clavier OK)
-- **LLM :** Claude API (Anthropic SDK) pour les explications
-- **Persistance :** JSON (audit log), CSV (output flaggé)
-- **Tests :** pytest
+- **Python 3.11+**, **pandas** / **numpy** / **scipy** (détection, 1 000 lignes en mémoire)
+- **Streamlit** (UI) + carte/deck en **HTML/CSS/JS vanilla** dans une iframe (`components.html`)
+- **Google Gemini** (`gemini-2.5-flash`) pour les explications, avec repli sans clé
+- Persistance par fichiers : `audit_log.json`, `data/explanations_cache.json`, `data/transactions_scored.csv`
+- **pytest** pour les tests
 
 ## Architecture
 
 ```
-                 ┌─────────────────┐
- transactions.csv│  profiling.py   │  profils par carte / device / IP
-                 └────────┬────────┘
-                          │
-                          ▼
-         ┌────────────────────────────────┐
-         │  detection/                    │
-         │  ├─ layer1_amount              │
-         │  ├─ layer2_velocity            │  scores s1..s4
-         │  ├─ layer3_burst               │
-         │  └─ layer4_cross_card          │
-         └────────────────┬───────────────┘
-                          │
-                          ▼
-                 ┌─────────────────┐
-                 │  scoring.py     │  fraud_score pondéré
-                 └────────┬────────┘
-                          │
-                          ▼
-                 ┌─────────────────┐
-                 │ explanations.py │  appel Claude API
-                 └────────┬────────┘
-                          │
-                          ▼
-                 ┌─────────────────┐
-                 │   ui/app.py     │  ◄── reviewer (clavier)
-                 └────────┬────────┘
-                          │
-                          ▼
-                 ┌─────────────────┐
-                 │   audit.py      │  audit_log.json
-                 └─────────────────┘
+ transactions.csv
+        │
+        ▼
+ profiling.py            profils par carte / device / IP / marchand
+        │
+        ▼
+ detection/              s1 montant (z-score) · s2 burst Poisson
+   layer1..layer4        s3 siphon · s4 cross-card (fenêtre marchand 2h)
+        │
+        ▼
+ scoring.py              final_score = Σ wi·si  + boost account-takeover
+        │                flag si final_score ≥ seuil ; tri décroissant
+        ▼
+ pipeline.py             orchestration détection → scoring (run_pipeline)
+        │
+        ▼
+ controler.py            mappe chaque transaction signalée en CaseFile
+        │  (+ explanations.py : verdicts Gemini, mis en cache)
+        ▼
+ ui/ (Streamlit)         swipe_deck.py / case_card.py — file de révision
+        │                + tableau de bord + feedback loop + export
+        ▼
+ feedback.py / audit.py  modificateurs en session · audit_log.json
 ```
 
-## Division du travail (à valider)
+## Découpage des modules
+
+| Module | Rôle |
+|---|---|
+| `src/profiling.py` | Statistiques de référence par carte / device / IP / marchand |
+| `src/detection/layer1_amount.py` | Écart de montant (z-score médiane/IQR par carte) |
+| `src/detection/layer2_poisson.py` | Rythme improbable (p-value Poisson, marchand + carte) |
+| `src/detection/layer3_burst.py` | Siphonnement (rafale sur fenêtre courte, catégories à risque) |
+| `src/detection/layer4_cross_card.py` | Cartes distinctes sur un marchand en 2 h |
+| `src/scoring.py` | Somme pondérée + boost + application du feedback + seuil |
+| `src/explanations.py` | Verdicts Gemini, parallélisés, cache disque, repli sans clé |
+| `src/pipeline.py` | Enchaîne détection → scoring |
+| `src/controler.py` | Construit la file de `CaseFile` consommée par l'UI |
+| `src/feedback.py` | `FeedbackManager` : modificateurs catégorie/device en session |
+| `src/audit.py` | Audit log JSON (load / append / undo) |
+| `src/ui/*` | App Streamlit, deck swipable, carte, données mock, contrat d'interface |
+
+Le contrat UI ↔ backend est figé dans [`src/ui/INTERFACE.md`](src/ui/INTERFACE.md)
+(forme des `CaseFile` consommés, forme des décisions émises).
+
+## Choix assumés (et ce qu'on a sciemment laissé de côté)
+
+- **Règles statistiques, pas de ML** : 1 000 lignes sans labels → des règles transparentes qu'on peut défendre en démo valent mieux qu'une boîte noire.
+- **Score pondéré + seuil ajustable** plutôt que des seuils en dur : permet le cost-aware tuning.
+- **Boucle de feedback côté client** (dans le deck) pour un apprentissage en session visible et sans latence ; export JSON pour la persistance serveur.
+- **Pas de pont iframe→Python automatique** : on passe par un export/import JSON (robuste, zéro dépendance) plutôt qu'un composant bidirectionnel à builder.
+- **Cache disque des explications** pour ne pas re-payer l'API à chaque session.
+
+## Répartition de l'équipe
 
 | Personne | Domaine | Fichiers |
 |---|---|---|
-| P1 | Data | `src/profiling.py`, `src/detection/*`, `tests/test_profiling.py`, `tests/test_detection.py` |
-| P2 | Scoring + LLM | `src/scoring.py`, `src/explanations.py`, `tests/test_scoring.py` |
-| P3 | UI | `src/ui/app.py` |
-| P4 | Glue + Docs | `src/audit.py`, `PRD.md`, `IMPLEMENTATION.md`, `HYPOTHESES.md`, README final |
-
-## Ce qu'on a choisi de skip
-
-- **ML supervisé** : 1000 lignes sans labels, ça n'a pas de sens. Règles statistiques transparentes > boîte noire qu'on ne sait pas défendre.
-- **Stockage persistant complexe** : un JSON pour l'audit, un CSV pour la sortie. Pas de Postgres pour 1000 lignes.
-- **Authentification** : un seul reviewer en demo, pas de login.
+| P1 | Détection | `profiling.py`, `detection/*`, tests détection |
+| P2 | Scoring / LLM | `scoring.py`, `explanations.py` |
+| P3 | UI | `ui/*` (carte, deck, dashboard, feedback, export) |
+| P4 | Intégration / Docs | `pipeline.py`, `controler.py`, `feedback.py`, `main.py`, docs |
