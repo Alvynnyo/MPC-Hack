@@ -21,13 +21,19 @@ def score_burst(df: pd.DataFrame) -> pd.Series:
 
     df_temp = df.copy()
     df_temp['timestamp'] = pd.to_datetime(df_temp['timestamp'])
+    df_temp = df_temp.sort_values("timestamp").copy()
+    df_temp["tx_count_10m"] = 0.0
 
     scores = pd.Series(0.0, index=df_temp.index)
 
-    window_counts = df_temp.groupby('card_id').rolling('10min', on='timestamp')['transaction_id'].count()
-
-    window_counts = window_counts.reset_index(level=0).drop(columns='card_id')
-    df_temp['tx_count_10m'] = window_counts['transaction_id']
+    for card_id, grp in df_temp.groupby("card_id"):
+        grp = grp.sort_values("timestamp")
+        counts = (
+            grp.rolling("10min", on="timestamp")["amount"]
+            .count()
+            .values
+        )
+        df_temp.loc[grp.index, "tx_count_10m"] = counts
 
     for idx, row in df_temp.iterrows():
         score = 0.0
@@ -39,13 +45,14 @@ def score_burst(df: pd.DataFrame) -> pd.Series:
         #plus de 5 ca augmente encore
         if count >= 5:
             score += 0.5
-            
-        
+
+
         cat = str(row.get('merchant_category', '')).lower()
         if count >= 3 and ('gift_card' in cat or 'online_retail' in cat):
             score += 0.2
-            
+
         scores[idx] = min(score, 1.0)
-        
-    
+
+
+    print(f"[DEBUG layer3] min={scores.min():.3f} max={scores.max():.3f} nonzero={(scores > 0).sum()}")
     return scores.reindex(df.index)
