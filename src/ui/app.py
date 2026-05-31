@@ -85,8 +85,16 @@ def main() -> None:
             max-width: 640px;
         }
 
-        /* Masquage des ornements Streamlit pour épurer la démo technique */
-        #MainMenu, footer, header {visibility: hidden;}
+        /* Masquage des ornements Streamlit pour épurer la démo technique.
+           NB : on ne cache PAS le <header> ni la <toolbar> entière, sinon le
+           bouton pour rouvrir la sidebar (qui vit dans la toolbar) disparaît.
+           On masque uniquement les actions (Deploy / menu) et la déco du haut. */
+        #MainMenu, footer {visibility: hidden;}
+        [data-testid="stToolbarActions"] {display: none;}
+        [data-testid="stDecoration"] {display: none;}
+        header[data-testid="stHeader"] {background: transparent;}
+        /* Blindage : le bouton de réouverture de la sidebar reste toujours visible */
+        [data-testid="stExpandSidebarButton"] {visibility: visible !important;}
         </style>
         """,
         unsafe_allow_html=True,
@@ -149,7 +157,7 @@ def main() -> None:
     deck_html = render_swipe_deck(cases_queue)
     
     # --- OPTIMISATION : Hauteur ajustée de 1250 à 680 suite au fix CSS compact ---
-    components.html(deck_html, height=1600, scrolling=False)
+    components.html(deck_html, height=1300, scrolling=False)
 
     render_decision_importer()
 
