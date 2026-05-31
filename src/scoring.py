@@ -6,8 +6,8 @@ from src.feedback import FeedbackManager
 @dataclass
 class Weights:
     """Poids des 4 couches. Doivent sommer à 1.0."""
-    w1: float = 0.25
-    w2: float = 0.25
+    w1: float = 0.20
+    w2: float = 0.30
     w3: float = 0.25
     w4: float = 0.25
 
@@ -55,6 +55,15 @@ def process_scoring_pipeline(
         s3=result_df['s3'], s4=result_df['s4'], 
         weights=weights
     )
+
+    # 2. Boost account takeover : gros montant + catégorie à haut risque
+    high_risk_cats = ['gift_card', 'electronics']
+    high_risk_mask = (
+        result_df['merchant_category'].isin(high_risk_cats) &
+        (result_df['s1'] >= 0.8)
+    )
+    result_df.loc[high_risk_mask, 'final_score'] += 0.05
+    result_df['final_score'] = result_df['final_score'].clip(0.0, 1.0)
     
     # 2. Application du Feedback Loop 
     if feedback_manager:

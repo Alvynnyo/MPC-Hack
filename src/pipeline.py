@@ -29,7 +29,7 @@ def _prepare_detection_df(csv_path: str) -> pd.DataFrame:
 def run_pipeline(
     csv_path: str,
     weights: Weights | None = None,
-    threshold: float = 0.5,
+    threshold: float = 0.28,
     feedback_manager: FeedbackManager | None = None,
 ) -> pd.DataFrame:
     """Exécute le pipeline de détection et retourne les transactions flaggées."""
@@ -44,10 +44,15 @@ def run_pipeline_and_export(
     csv_path: str,
     output_path: str,
     weights: Weights | None = None,
-    threshold: float = 0.5,
+    threshold: float = 0.28,
 ) -> pd.DataFrame:
     """Exécute le pipeline, exporte le DataFrame complet et retourne les flaggées."""
     df = _prepare_detection_df(csv_path)
-    flagged_df = run_pipeline(csv_path, weights, threshold)
+
+    if weights is None:
+        weights = Weights()
+
+
+    flagged_df = process_scoring_pipeline(df, weights, threshold)
     df.to_csv(output_path, index=False)
     return flagged_df

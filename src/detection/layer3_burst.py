@@ -9,16 +9,7 @@ Voir PLAN.md, étape 2, couche 3.
 from __future__ import annotations
 
 import pandas as pd
-
-
 def score_burst(df: pd.DataFrame) -> pd.Series:
-    """
-    Retourne un score [0, 1] par transaction.
-
-    Idée : fenêtre glissante de 10 minutes par card_id. Compter les transactions
-    dans la fenêtre, mesurer la variance des montants. Boost si catégorie à risque.
-    """
-
     df_temp = df.copy()
     df_temp['timestamp'] = pd.to_datetime(df_temp['timestamp'])
     df_temp = df_temp.sort_values("timestamp").copy()
@@ -39,10 +30,8 @@ def score_burst(df: pd.DataFrame) -> pd.Series:
         score = 0.0
         count = row['tx_count_10m']
 
-        # Si plus de 3 transactions en 10 minutes, le risque commence
         if count >= 3:
-            score += 0.3
-        #plus de 5 ca augmente encore
+            score += 0.4
         if count >= 5:
             score += 0.5
 

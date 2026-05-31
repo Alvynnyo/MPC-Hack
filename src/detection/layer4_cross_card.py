@@ -10,14 +10,17 @@ from __future__ import annotations
 
 import pandas as pd
 
-
-def score_cross_card(df: pd.DataFrame, device_profiles: dict, ip_profiles: dict) -> pd.Series:
+def score_cross_card(
+    df: pd.DataFrame,
+    device_profiles: dict,
+    ip_profiles: dict,
+) -> pd.Series:
     """
     Retourne un score [0, 1] par transaction.
 
-    Idée : si le device de la transaction a vu > K cartes, score élevé.
-    Idem pour l'IP. Prendre le max des deux.
-
+    Pour chaque transaction, compte le nombre de cartes distinctes
+    ayant utilisé le même marchand dans les 2h précédentes.
+    Score fort si >= 4 cartes distinctes.
     """
     scores = pd.Series(0.0, index=df.index)
 
