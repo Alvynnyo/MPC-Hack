@@ -5,6 +5,13 @@ import subprocess
 import sys
 from pathlib import Path
 
+# La console Windows (cp1252) ne sait pas encoder certains caractères (✓, →…).
+# On force la sortie en UTF-8 pour éviter un UnicodeEncodeError au démarrage.
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
 ROOT = Path(__file__).parent
 
 
@@ -13,7 +20,7 @@ def step(n: int, label: str) -> None:
 
 
 def ok() -> None:
-    print("✓")
+    print("OK")
 
 
 def fail(msg: str) -> None:
@@ -70,7 +77,7 @@ env_example = ROOT / ".env.example"
 if not env_file.exists() and env_example.exists():
     shutil.copy(env_example, env_file)
     ok()
-    print("      → .env créé depuis .env.example.")
+    print("      -> .env créé depuis .env.example.")
     print("        Renseigne GEMINI_API_KEY dans .env pour les verdicts IA.")
     print("        Sans clé, l'app fonctionne avec un verdict de repli.")
 else:
@@ -82,6 +89,13 @@ print()
 app = ROOT / "src" / "ui" / "app.py"
 if not app.exists():
     fail(f"Point d'entrée introuvable : {app}")
+
+# Évite le prompt d'email de première utilisation de Streamlit (équivaut à
+# appuyer sur Entrée) afin que le serveur démarre directement.
+cred = Path.home() / ".streamlit" / "credentials.toml"
+if not cred.exists():
+    cred.parent.mkdir(parents=True, exist_ok=True)
+    cred.write_text('[general]\nemail = ""\n', encoding="utf-8")
 
 os.execv(
     str(venv_python),
