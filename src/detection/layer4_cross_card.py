@@ -58,3 +58,29 @@ def score_cross_card(
         scores[idx] = min(score, 1.0)
 
     return scores.reindex(df.index)
+
+
+def get_cross_card_transactions(
+    df: pd.DataFrame,
+    merchant_name: str,
+    anchor_timestamp,
+    current_card_id: str,
+    window_hours: int = 2,
+) -> pd.DataFrame:
+    """
+    Retourne les autres cartes ayant utilisé le même marchand
+    dans une fenêtre ±window_hours.
+    """
+    ts = pd.to_datetime(anchor_timestamp)
+
+    start = ts - pd.Timedelta(hours=window_hours)
+    end = ts + pd.Timedelta(hours=window_hours)
+
+    result = df[
+        (df["merchant_name"] == merchant_name)
+        & (pd.to_datetime(df["timestamp"]) >= start)
+        & (pd.to_datetime(df["timestamp"]) <= end)
+        & (df["card_id"] != current_card_id)
+    ]
+
+    return result.sort_values("timestamp", ascending=False)
