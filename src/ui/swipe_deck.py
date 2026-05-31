@@ -1,0 +1,402 @@
+"""
+[P3] Deck de swipe type Tinder — version pro.
+
+Rend une pile de dossiers dans une seule iframe. Toute l'interaction (drag,
+clavier, undo, fin de file) est gérée côté client en JS vanilla, ce qui donne
+un swipe fluide sans rerun Streamlit par carte.
+
+Gestes :
+    ← / A   classer fraude     (voile bleu)
+    → / D   marquer légitime   (voile vert)
+    ↑ / E   escalader          (voile jaune)
+    Z       annuler la dernière décision
+
+Les décisions sont accumulées côté client et exportables en CSV depuis l'écran
+de fin. Le pont vers le backend Python (audit.py / feedback.py) viendra ensuite.
+"""
+from __future__ import annotations
+
+from src.ui.case_card import CARD_CSS, render_card_inner, render_controls
+from src.ui.mock_data import CaseFile
+
+
+DECK_CSS = """
+body { padding: 18px 16px 28px; }
+.deck-wrap { width: min(560px, 100%); margin: 0 auto; }
+
+.stage { position: relative; }   /* hauteur fixée par JS */
+
+.swipe-card {
+  position: absolute; top: 0; left: 0; right: 0;
+  transition: transform 360ms cubic-bezier(.2,.7,.2,1), opacity 300ms ease;
+  will-change: transform, opacity;
+  touch-action: none;
+}
+.swipe-card.dragging { transition: none; }
+.swipe-card.gone { display: none; }
+.swipe-card .card { user-select: none; -webkit-user-select: none; }
+.swipe-card.top { cursor: grab; }
+.swipe-card.top:active { cursor: grabbing; }
+
+.tint {
+  position: absolute; inset: 0; border-radius: 16px;
+  opacity: 0; pointer-events: none; transition: opacity 120ms ease;
+}
+.decision-label {
+  position: absolute; top: 28px; left: 50%;
+  transform: translateX(-50%) rotate(-5deg);
+  padding: 8px 20px; border: 3px solid; border-radius: 12px;
+  font-family: var(--font-sans); font-weight: 700; font-size: 22px;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  opacity: 0; pointer-events: none; transition: opacity 120ms ease;
+  background: rgba(255,255,255,0.86);
+}
+
+/* Panneau de contrôles sous la pile */
+.deck-controls {
+  width: 100%;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 14px;
+  padding: 16px 18px 18px;
+  box-shadow: 0 1px 2px rgba(16,24,40,0.04), 0 8px 16px -8px rgba(16,24,40,0.08);
+}
+.deck-progress { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.deck-progress .label { font-size: 12px; font-weight: 600; color: var(--c-text-2); }
+.deck-progress .count { font-family: var(--font-mono); font-size: 12px; color: var(--c-text-3); }
+.progress-track { height: 6px; border-radius: 999px; background: #EAECF0; overflow: hidden; margin-bottom: 16px; }
+.progress-fill { height: 100%; width: 0%; background: #1E40AF; border-radius: 999px; transition: width 280ms ease; }
+
+/* Écran de fin */
+.deck-done {
+  width: 100%;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 16px;
+  padding: 28px 24px;
+  text-align: center;
+  box-shadow: 0 1px 2px rgba(16,24,40,0.04), 0 20px 32px -12px rgba(16,24,40,0.10);
+}
+.deck-done h2 { font-size: 18px; font-weight: 600; color: var(--c-text); margin-bottom: 6px; }
+.deck-done p { font-size: 13px; color: var(--c-text-3); margin-bottom: 20px; }
+.done-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 22px; }
+.done-stat { border: 1px solid var(--c-border); border-radius: 10px; padding: 14px 8px; }
+.done-stat .n { font-family: var(--font-mono); font-size: 24px; font-weight: 600; }
+.done-stat .k { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--c-text-3); margin-top: 4px; }
+.done-actions { display: flex; gap: 10px; justify-content: center; }
+"""
+
+
+# JS vanilla — chaîne brute (les accolades internes ne sont pas du f-string).
+DECK_JS = r"""
+(function () {
+  const DIRS = {
+    fraud:    { dx: -1, dy: 0,  text: 'Fraude',   color: '#1E40AF', tint: 'rgba(30,64,175,0.16)' },
+    legit:    { dx: 1,  dy: 0,  text: 'Légitime', color: '#17B26A', tint: 'rgba(23,178,106,0.16)' },
+    escalate: { dx: 0,  dy: -1, text: 'Escalader',color: '#CA8A04', tint: 'rgba(202,138,4,0.16)' },
+  };
+  const THRESHOLD = 110;
+
+  const stage = document.getElementById('stage');
+  const cards = Array.from(document.querySelectorAll('.swipe-card'));
+  const total = cards.length;
+  const fill = document.getElementById('progressFill');
+  const countEl = document.getElementById('progressCount');
+  const labelEl = document.getElementById('progressLabel');
+  const doneEl = document.getElementById('deckDone');
+  const controlsEl = document.getElementById('deckControls');
+
+  let cur = 0;
+  const decisions = new Array(total).fill(null);
+  const lastDir = new Array(total).fill(null);
+  const history = [];
+
+  // Hauteur de la scène = carte la plus haute (+ marge pour la pile derrière)
+  function sizeStage() {
+    let maxH = 0;
+    cards.forEach(c => { maxH = Math.max(maxH, c.offsetHeight); });
+    stage.style.height = (maxH + 30) + 'px';
+  }
+
+  function restack() {
+    cards.forEach((card, i) => {
+      card.classList.remove('top', 'gone');
+      const tint = card.querySelector('.tint');
+      const label = card.querySelector('.decision-label');
+      tint.style.opacity = 0;
+      label.style.opacity = 0;
+
+      if (i < cur) {
+        card.classList.add('gone');
+      } else if (i === cur) {
+        card.classList.add('top');
+        card.style.zIndex = 100;
+        card.style.transform = 'translate(0,0) rotate(0deg)';
+        card.style.opacity = 1;
+      } else {
+        const depth = i - cur;
+        if (depth <= 2) {
+          card.style.zIndex = 100 - depth;
+          card.style.transform = 'translateY(' + (depth * 14) + 'px) scale(' + (1 - depth * 0.04) + ')';
+          card.style.opacity = 1;
+        } else {
+          card.style.zIndex = 100 - depth;
+          card.style.transform = 'translateY(28px) scale(0.92)';
+          card.style.opacity = 0;
+        }
+      }
+    });
+    updateProgress();
+  }
+
+  function updateProgress() {
+    const done = cur;
+    fill.style.width = (total ? (done / total) * 100 : 0) + '%';
+    countEl.textContent = done + ' / ' + total;
+    if (cur < total) {
+      labelEl.textContent = 'Dossier ' + (cur + 1) + ' sur ' + total;
+    } else {
+      labelEl.textContent = 'File terminée';
+    }
+  }
+
+  function applyDrag(card, dx, dy) {
+    const rot = dx * 0.04;
+    card.style.transform = 'translate(' + dx + 'px,' + dy + 'px) rotate(' + rot + 'deg)';
+    const dir = dirFromDelta(dx, dy);
+    const tint = card.querySelector('.tint');
+    const label = card.querySelector('.decision-label');
+    if (!dir) { tint.style.opacity = 0; label.style.opacity = 0; return; }
+    const d = DIRS[dir];
+    const mag = Math.min(Math.max(Math.abs(dx), Math.abs(dy)) / THRESHOLD, 1);
+    tint.style.background = d.tint;
+    tint.style.opacity = mag * 0.9;
+    label.textContent = d.text;
+    label.style.color = d.color;
+    label.style.borderColor = d.color;
+    label.style.opacity = Math.min(mag * 1.4, 1);
+  }
+
+  function dirFromDelta(dx, dy) {
+    if (dy < -60 && Math.abs(dy) > Math.abs(dx)) return 'escalate';
+    if (Math.abs(dx) < 24 && Math.abs(dy) < 24) return null;
+    return dx < 0 ? 'fraud' : 'legit';
+  }
+
+  function flyOff(dir) {
+    if (cur >= total) return;
+    const card = cards[cur];
+    const d = DIRS[dir];
+    const tint = card.querySelector('.tint');
+    const label = card.querySelector('.decision-label');
+
+    // Voile + label pleins pendant la sortie
+    tint.style.background = d.tint;
+    tint.style.opacity = 0.9;
+    label.textContent = d.text;
+    label.style.color = d.color;
+    label.style.borderColor = d.color;
+    label.style.opacity = 1;
+
+    card.classList.remove('dragging');
+    const offX = d.dx * 140;
+    const offY = d.dy * 140;
+    const rot = d.dx * 12;
+    card.style.transform = 'translate(' + offX + 'vw,' + offY + 'vh) rotate(' + rot + 'deg)';
+    card.style.opacity = 0;
+
+    decisions[cur] = dir;
+    lastDir[cur] = dir;
+    history.push(cur);
+    const decided = cur;
+    cur += 1;
+
+    setTimeout(() => {
+      restack();
+      if (cur >= total) showDone();
+    }, 340);
+  }
+
+  function undo() {
+    if (history.length === 0) return;
+    if (cur >= total) hideDone();
+    const idx = history.pop();
+    decisions[idx] = null;
+    cur = idx;
+
+    const card = cards[idx];
+    const d = DIRS[lastDir[idx]] || DIRS.legit;
+    // place la carte hors-champ du côté de sa sortie, puis on la ramène
+    card.classList.remove('gone', 'dragging');
+    card.style.transition = 'none';
+    card.style.transform = 'translate(' + (d.dx * 140) + 'vw,' + (d.dy * 140) + 'vh) rotate(' + (d.dx * 12) + 'deg)';
+    card.style.opacity = 0;
+    // force reflow puis anime le retour
+    void card.offsetWidth;
+    card.style.transition = '';
+    restack();
+  }
+
+  // --- Drag (pointer events) sur la carte du dessus ---
+  let dragging = null, startX = 0, startY = 0;
+
+  stage.addEventListener('pointerdown', (e) => {
+    if (cur >= total) return;
+    const card = cards[cur];
+    if (!card.contains(e.target)) return;
+    if (e.target.closest('button')) return;  // ne pas drag depuis un bouton
+    dragging = card;
+    startX = e.clientX; startY = e.clientY;
+    card.classList.add('dragging');
+    card.setPointerCapture(e.pointerId);
+  });
+
+  stage.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    applyDrag(dragging, e.clientX - startX, e.clientY - startY);
+  });
+
+  function endDrag(e) {
+    if (!dragging) return;
+    const dx = e.clientX - startX, dy = e.clientY - startY;
+    const card = dragging;
+    dragging = null;
+    card.classList.remove('dragging');
+    const dir = dirFromDelta(dx, dy);
+    const passed = Math.max(Math.abs(dx), Math.abs(dy)) >= THRESHOLD;
+    if (dir && passed) {
+      flyOff(dir);
+    } else {
+      // retour à la place
+      card.style.transform = 'translate(0,0) rotate(0deg)';
+      card.querySelector('.tint').style.opacity = 0;
+      card.querySelector('.decision-label').style.opacity = 0;
+    }
+  }
+  stage.addEventListener('pointerup', endDrag);
+  stage.addEventListener('pointercancel', endDrag);
+
+  // --- Boutons ---
+  document.querySelectorAll('[data-action]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const map = { fraud: 'fraud', legit: 'legit', escalate: 'escalate' };
+      const dir = map[btn.getAttribute('data-action')];
+      if (dir) flyOff(dir);
+    });
+  });
+  const undoBtn = document.getElementById('undoBtn');
+  if (undoBtn) undoBtn.addEventListener('click', undo);
+
+  // --- Clavier ---
+  document.addEventListener('keydown', (e) => {
+    const k = e.key.toLowerCase();
+    if (k === 'a' || e.key === 'ArrowLeft') { e.preventDefault(); flyOff('fraud'); }
+    else if (k === 'd' || e.key === 'ArrowRight') { e.preventDefault(); flyOff('legit'); }
+    else if (k === 'e' || e.key === 'ArrowUp') { e.preventDefault(); flyOff('escalate'); }
+    else if (k === 'z') { e.preventDefault(); undo(); }
+  });
+
+  // --- Écran de fin ---
+  function showDone() {
+    const n = { fraud: 0, legit: 0, escalate: 0 };
+    decisions.forEach(d => { if (d) n[d] += 1; });
+    document.getElementById('nFraud').textContent = n.fraud;
+    document.getElementById('nLegit').textContent = n.legit;
+    document.getElementById('nEscalate').textContent = n.escalate;
+    stage.style.display = 'none';
+    controlsEl.style.display = 'none';
+    doneEl.hidden = false;
+  }
+  function hideDone() {
+    doneEl.hidden = true;
+    stage.style.display = '';
+    controlsEl.style.display = '';
+  }
+
+  // Export CSV des décisions
+  document.getElementById('downloadBtn').addEventListener('click', () => {
+    let csv = 'case_id,decision\n';
+    cards.forEach((c, i) => {
+      csv += c.getAttribute('data-id') + ',' + (decisions[i] || '') + '\n';
+    });
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'decisions.csv';
+    a.click();
+  });
+
+  document.getElementById('restartBtn').addEventListener('click', () => {
+    cur = 0;
+    decisions.fill(null);
+    history.length = 0;
+    hideDone();
+    cards.forEach(c => { c.style.transition = 'none'; });
+    restack();
+    requestAnimationFrame(() => cards.forEach(c => { c.style.transition = ''; }));
+  });
+
+  // Init
+  window.addEventListener('load', () => { sizeStage(); restack(); window.focus(); });
+  sizeStage();
+  restack();
+})();
+"""
+
+
+def render_swipe_deck(cases: list[CaseFile]) -> str:
+    """Document HTML complet : pile de dossiers swipables + contrôles + fin."""
+    cards_html = "\n".join(
+        f"""
+        <div class="swipe-card" data-index="{i}" data-id="{case.case_id}">
+          {render_card_inner(case)}
+          <div class="tint"></div>
+          <div class="decision-label"></div>
+        </div>
+        """
+        for i, case in enumerate(cases)
+    )
+
+    controls = render_controls()
+
+    return f"""<!DOCTYPE html>
+<html>
+<head><style>{CARD_CSS}{DECK_CSS}</style></head>
+<body>
+  <div class="deck-wrap">
+
+    <div class="stage" id="stage">
+      {cards_html}
+    </div>
+
+    <div class="deck-controls" id="deckControls">
+      <div class="deck-progress">
+        <span class="label" id="progressLabel">Dossier 1</span>
+        <span class="count" id="progressCount">0 / {len(cases)}</span>
+      </div>
+      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+      {controls}
+      <div style="text-align:center; margin-top: 6px;">
+        <button id="undoBtn" class="btn" style="display:none;">Annuler</button>
+      </div>
+    </div>
+
+    <div class="deck-done" id="deckDone" hidden>
+      <h2>File terminée</h2>
+      <p>Toutes les décisions ont été enregistrées.</p>
+      <div class="done-stats">
+        <div class="done-stat"><div class="n" id="nFraud" style="color:#1E40AF;">0</div><div class="k">Fraude</div></div>
+        <div class="done-stat"><div class="n" id="nEscalate" style="color:#CA8A04;">0</div><div class="k">Escaladé</div></div>
+        <div class="done-stat"><div class="n" id="nLegit" style="color:#17B26A;">0</div><div class="k">Légitime</div></div>
+      </div>
+      <div class="done-actions">
+        <button id="downloadBtn" class="btn btn-fraud" type="button">Exporter CSV</button>
+        <button id="restartBtn" class="btn" type="button">Recommencer</button>
+      </div>
+    </div>
+
+  </div>
+  <script>{DECK_JS}</script>
+</body>
+</html>
+"""

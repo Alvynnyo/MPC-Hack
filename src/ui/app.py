@@ -12,8 +12,8 @@ from __future__ import annotations
 import streamlit as st
 import streamlit.components.v1 as components
 
-from src.ui.mock_data import MOCK_CASE
-from src.ui.case_card import render_case_card
+from src.ui.mock_data import MOCK_CASES
+from src.ui.swipe_deck import render_swipe_deck
 
 
 def main() -> None:
@@ -69,9 +69,9 @@ def main() -> None:
         unsafe_allow_html=True,
     )
 
-    # Carte dossier (mockée pour l'instant)
-    card_html = render_case_card(MOCK_CASE)
-    components.html(card_html, height=1000, scrolling=False)
+    # Deck de dossiers swipables (mocké pour l'instant)
+    deck_html = render_swipe_deck(MOCK_CASES)
+    components.html(deck_html, height=1080, scrolling=False)
 
 
 if __name__ == "__main__":
