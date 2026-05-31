@@ -275,6 +275,7 @@ def initialize_fraud_queue(
             score=ctx.fraud_score,
             risk_label=_determine_risk_label(ctx.fraud_score),
             verdict=explanations_dict.get(ctx.transaction_id, "Alerte générée automatiquement."),
+            merchant_category=ctx.merchant_category,  # requis par la boucle de feedback (clé de similarité)
             evidence=_generate_evidence(ctx),
             previous=_generate_previous_tx(
                 card_group=card_group,
