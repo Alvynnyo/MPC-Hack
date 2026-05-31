@@ -9,16 +9,66 @@ Voir PLAN.md étape 5 pour le comportement.
 """
 from __future__ import annotations
 
+import json
+
 import streamlit as st
 import streamlit.components.v1 as components
 
-#from src.ui.mock_data import MOCK_CASES
 from src.ui.swipe_deck import render_swipe_deck
 
 from src.controler import initialize_fraud_queue
 from src.scoring import Weights
 from src.feedback import FeedbackManager
-from src.ui.swipe_deck import render_swipe_deck
+from src import audit
+
+
+# Mappage décision UI -> labels backend
+_AUDIT_DECISION = {"fraud": "approve_fraud", "legit": "dismiss", "escalate": "escalate"}
+_FEEDBACK_LABEL = {"legit": "Innocenter", "fraud": "Classer"}  # escalate = neutre
+
+
+def render_decision_importer() -> None:
+    """Téléverse le rapport JSON exporté par le deck et le rejoue côté serveur :
+    alimente le FeedbackManager (modificateurs) et persiste l'audit log."""
+    with st.expander("Importer un rapport de décisions (audit + feedback)"):
+        up = st.file_uploader("Glissez le fichier decisions.json", type="json", key="dec_upload")
+        data = None
+        if up is not None:
+            try:
+                data = json.load(up)
+            except (json.JSONDecodeError, ValueError) as exc:
+                st.error(f"JSON invalide : {exc}")
+
+        if data and st.button("Enregistrer ces décisions", type="primary"):
+            fb = st.session_state.feedback
+            processed = 0
+            for d in data:
+                dec = d.get("decision")
+                if not dec:
+                    continue  # dossier non traité
+                label = _FEEDBACK_LABEL.get(dec)
+                if label:
+                    fb.record_decision(
+                        {"merchant_category": d.get("category"), "device_id": d.get("device_id")},
+                        label,
+                    )
+                audit.log_decision(
+                    transaction_id=d.get("case_id", ""),
+                    decision=_AUDIT_DECISION.get(dec, "dismiss"),
+                    initial_score=d.get("score", 0.0),
+                    reasons=[f"catégorie {d.get('category', '?')}"],
+                )
+                processed += 1
+            st.success(f"{processed} décision(s) enregistrée(s) dans l'audit log.")
+            mods = {**fb.category_modifiers, **fb.device_modifiers}
+            if mods:
+                st.caption("Modificateurs appris (rejoués au prochain scoring) :")
+                st.json(mods)
+
+        log = audit.load_audit_log()
+        if log:
+            st.caption(f"Audit log — {len(log)} entrée(s) (15 dernières) :")
+            st.dataframe(log[-15:], use_container_width=True, hide_index=True)
 
 
 def main() -> None:
@@ -92,10 +142,13 @@ def main() -> None:
 
     if not cases_queue:
         st.success("File d'attente vide. Aucune fraude détectée.")
+        render_decision_importer()
         return
 
     deck_html = render_swipe_deck(cases_queue)
     components.html(deck_html, height=1220, scrolling=False)
+
+    render_decision_importer()
 
 if __name__ == "__main__":
     main()
