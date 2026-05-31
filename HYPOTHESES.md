@@ -37,9 +37,9 @@ seuil « > N transactions » qui dépend du volume du marchand.
 
 **Idée :** découpage d'un gros montant ou test de carte via micro-transactions.
 
-**Retenu :** comptage sur fenêtre glissante de 10 min par carte. `count ≥ 3`
-→ +0.3 ; `count ≥ 5` → +0.5 ; bonus +0.2 si catégorie à risque
-(`gift_card`, `online_retail`).
+**Retenu :** comptage sur fenêtre glissante de ±10 min par carte. `count ≥ 3`
+→ +0.4 ; `count ≥ 5` → +0.3 (cumulatif) ; bonus +0.3 si `count ≥ 3` **et**
+catégorie à risque (`gift_card`, `online_retail`). Score plafonné à 1.0.
 
 **Effet :** 4 achats gift_card en 8 min → score > 0.6 ; 2 restos espacés de 2 h
 → < 0.2. **Gardé.**

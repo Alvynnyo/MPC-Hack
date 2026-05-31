@@ -20,7 +20,7 @@ Un outil de bout en bout qui :
 3. **Explique** chaque signalement par un verdict en langage naturel (Gemini), avec repli si pas de clé API.
 4. **Présente** une file de révision type Tinder : une carte à la fois, swipe / clavier (`←/A` fraude, `→/D` légitime, `↑/E` escalader, `Z` annuler), undo.
 5. **Récapitule** dans un tableau de bord : KPIs (taux de fraude, temps moyen), restants par importance, traités par décision.
-6. **Apprend en session** : innocenter 2 cas d'une même catégorie ⇒ les signalements similaires restants sont dépriorisés en direct (feedback loop).
+6. **Apprend en session (feedback bidirectionnel)** : 2 « légitime » sur une catégorie ⇒ flags similaires dépriorisés ; 2 « fraude » ⇒ flags similaires remontés en priorité. En direct.
 7. **Trace et exporte** : décisions exportables (JSON), réimportables côté serveur → audit log persistant + modificateurs de scoring.
 8. **Cost-aware** : un slider « seuil de signalement » montre en direct comment la file grossit/rétrécit selon le compromis faux positif / fraude manquée.
 

@@ -31,10 +31,20 @@ class CaseFile:
     previous: list[PreviousTx]    # historique récent de la carte
 ```
 
-> **`merchant_category`** alimente la boucle de feedback (§4). Optionnel mais
-> recommandé : sans lui, l'apprentissage en session n'a pas de clé de similarité.
-> Côté `controler.py`, il suffit d'ajouter `merchant_category=str(row['merchant_category'])`
-> à la construction du `CaseFile`.
+> **`merchant_category`** alimente la boucle de feedback (§4). **Branché** :
+> `controler.py` le renseigne via `merchant_category=ctx.merchant_category`.
+> Sans lui, l'apprentissage en session n'aurait pas de clé de similarité.
+
+**Attributs dynamiques** (posés par `controler.py` après construction, lus par
+`cart_renderer_v2.py` pour la section basse adaptative — optionnels, valeurs par
+défaut sûres) :
+
+```python
+case.dominant_signal = "montant" | "poisson" | "vitesse" | "cross_card"
+case.merchant        = "Amazon.ca"        # nom du marchand
+case.merchant_data   = [ ... ]            # autres tx sur le terminal (signal "poisson")
+case.device_data     = [ ... ]            # cartes liées à l'appareil (signal "cross_card")
+```
 
 ```python
 @dataclass
@@ -55,31 +65,28 @@ class PreviousTx:
 
 ### Règles de mapping (côté producteur P1/P2)
 
-- `score` ∈ [0, 1]. La couleur (bleu/jaune/vert) est dérivée automatiquement :
-  `≥ 0.75` élevé (bleu), `≥ 0.45` moyen (jaune), sinon faible (vert).
+- `score` ∈ [0, 1]. La couleur de la jauge/pill est dérivée automatiquement
+  (`cart_renderer_v2._risk_tokens`) : `≥ 0.60` élevé (rouge), `≥ 0.40` moyen
+  (jaune), sinon faible (vert).
 - `risk_label` doit être cohérent avec `score` (texte affiché tel quel).
 - `severity` d'un `Evidence` pilote la couleur du badge et de l'icône :
-  - `critical` → bleu (signal fort : device/IP partagé, nouveau device, rafale…)
+  - `critical` → rouge (signal fort : device/IP partagé, rafale, montant ≥ 0.8…)
   - `warning` → jaune (signal modéré : montant atypique, heure, pays…)
   - `info` → vert (élément rassurant : device connu, montant normal…)
 - `previous` : mettre **exactement une** entrée à `status="current"`
   (la transaction analysée) ; les autres en `"ok"` ou `"suspect"`.
 
-### Point d'entrée à fournir (P2/P4)
+### Point d'entrée (branché)
 
-L'UI importe aujourd'hui `MOCK_CASES`. Pour brancher le vrai pipeline, exposer
-une fonction qui renvoie `list[CaseFile]`, par exemple :
+`controler.initialize_fraud_queue(csv_path, threshold, feedback_manager)`
+renvoie la `list[CaseFile]` triée par score. Elle enchaîne :
 
-```python
-def load_cases() -> list[CaseFile]:
-    # 1. scoring.process_scoring_pipeline(...) -> queue_df (déjà filtrée/triée)
-    # 2. explanations.precompute_explanations(...) -> {transaction_id: verdict}
-    # 3. mapper chaque ligne en CaseFile (+ Evidence + PreviousTx)
-    ...
-```
+1. `pipeline.run_pipeline(...)` → transactions signalées (scoring + seuil) ;
+2. `explanations.precompute_explanations(...)` → `{transaction_id: verdict}` (cache disque) ;
+3. mapping en `CaseFile` (+ `Evidence`, `PreviousTx`, attributs dynamiques).
 
-Puis dans `src/ui/app.py`, remplacer `MOCK_CASES` par `load_cases()`.
-**Aucun autre changement UI nécessaire.**
+`src/ui/app.py` l'appelle directement (via `@st.cache_data`, clé = seuil) ;
+`MOCK_CASES` ne sert plus que pour les aperçus de dev hors pipeline.
 
 ---
 

@@ -1,7 +1,14 @@
 # Plan — Fraud Hunter (Track Valsoft, MPC Hacks 2026)
 
+> ℹ️ **Ceci est le plan d'origine** (feuille de route initiale). L'état réellement
+> livré peut différer sur quelques points — voir [`README.md`](README.md) et
+> [`IMPLEMENTATION.md`](IMPLEMENTATION.md) pour l'architecture *as-built*.
+> Écarts notables : les explications utilisent **Google Gemini** (pas Claude) ;
+> l'UX finale est un **outil de triage pro** (la métaphore « dossier d'enquête »
+> a été abandonnée) ; la couche 2 est devenue un test de **Poisson**.
+
 > **Approche choisie : A + B**
-> Moteur de détection statistique solide (pandas, scoring par carte + cross-carte) + UX type **"Dossier d'enquête"** où chaque flag est une affaire à instruire, avec explications en langage naturel générées par Claude API.
+> Moteur de détection statistique solide (pandas, scoring par carte + cross-carte) + UX de file de révision où chaque flag est une affaire à instruire, avec explications en langage naturel générées par LLM.
 
 ---
 

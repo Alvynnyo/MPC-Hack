@@ -34,9 +34,9 @@ python -m pytest -q
 1. **Ingestion** de `data/transactions.csv` (1 000 transactions, 50 cartes, 1 mois).
 2. **Détection** : 4 couches indépendantes → score pondéré → ~69 transactions flaggées.
 3. **Explication** : chaque flag reçoit un verdict en langage naturel (Gemini).
-4. **Révision** : file type Tinder — `←/A` fraude, `→/D` légitime, `↑/E` escalader, `Z` annuler.
+4. **Révision** : file type Tinder, boutons d'action en haut + onglets (Révision / Tableau de bord). Clavier `←/A` fraude, `→/D` légitime, `↑/E` escalader, `Z` annuler ; drag à la souris.
 5. **Tableau de bord** : KPIs (taux de fraude, temps moyen), restants par importance, traités par décision.
-6. **Boucle de feedback** : innocenter 2 cas d'une même catégorie ⇒ les flags similaires restants sont dépriorisés en direct.
+6. **Boucle de feedback (bidirectionnelle)** : 2 « légitime » sur une catégorie ⇒ catégorie *fiable* (flags similaires dépriorisés, vert) ; 2 « fraude » ⇒ catégorie *à risque confirmé* (flags similaires remontés, rouge). En direct, recalculé depuis l'état (cohérent avec l'undo).
 7. **Audit / export** : décisions exportables (JSON), réimportables côté serveur → `audit_log.json` + modificateurs de scoring.
 
 ## Stratégie de détection
@@ -71,7 +71,7 @@ MPC-Hack/
 │   ├── controler.py             # construit la file de CaseFile pour l'UI
 │   ├── feedback.py              # FeedbackManager (modificateurs en session)
 │   ├── audit.py                 # audit_log.json (load / append / undo)
-│   └── ui/                      # [P3] app.py, swipe_deck.py, case_card.py, mock_data.py, INTERFACE.md
+│   └── ui/                      # [P3] app.py, swipe_deck.py, cart_renderer_v2.py, mock_data.py, INTERFACE.md
 ├── tests/                       # pytest (profiling, détection, scoring)
 ├── design-system/               # référence visuelle (MASTER.md)
 └── PLAN.md / PRD.md / IMPLEMENTATION.md / HYPOTHESES.md
@@ -79,8 +79,8 @@ MPC-Hack/
 
 ## If we had another week
 
-- **Brancher le feedback live sur les vraies données** : exposer `merchant_category` (et `device_id`) dans `controler.py` pour que la boucle apprenne aussi hors mock.
-- **Pont iframe → Python automatique** (composant bidirectionnel) pour enregistrer les décisions sans étape d'export/import.
-- **Cache disque des explications** pour un démarrage instantané (aujourd'hui recalculé par session).
+- **Pont iframe → Python automatique** (composant bidirectionnel) pour enregistrer les décisions sans l'étape d'export/import.
+- **Feedback aussi par `device_id`** : l'exposer dans le `CaseFile` + l'export pour activer le chemin device du `FeedbackManager` (aujourd'hui seul le chemin catégorie est alimenté).
 - **Calibration des seuils sur un jeu étiqueté** pour mesurer un vrai F1 et optimiser les poids.
-- **Receipt / preuve par décision** plus riche dans l'audit (features ayant déclenché le flag).
+- **Aligner la couleur du voile de swipe / dashboard** (encore bleu) sur le rouge des cartes.
+- **Receipt / preuve par décision** plus riche dans l'audit (features exactes ayant déclenché le flag).

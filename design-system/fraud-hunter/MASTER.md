@@ -31,8 +31,9 @@ icônes vectorielles — aucun effet « gadget ».
 
 ## Palette de couleurs
 
-Sémantique : **bleu sombre = critique/fraude**, **jaune clair = avertissement/escalader**,
-**vert = ok/légitime**. Le rouge n'est pas utilisé.
+Sémantique (telle qu'appliquée sur les **cartes**) :
+**rouge = critique / risque élevé / fraude**, **jaune = avertissement / risque moyen / escalader**,
+**vert = ok / risque faible / légitime**.
 
 | Rôle | Hex |
 |---|---|
@@ -48,9 +49,15 @@ Sémantique : **bleu sombre = critique/fraude**, **jaune clair = avertissement/e
 
 | Niveau | Texte (fg) | Fond (bg) | Bordure | Accent/jauge |
 |---|---|---|---|---|
-| Critique (fraude, risque élevé) | `#1E3A8A` | `#EFF4FF` | `#C7D7FE` | `#1E40AF` |
+| Critique (fraude, risque élevé) | `#B42318` | `#FEF3F2` | `#FECDCA` | `#D92D20` |
 | Avertissement (escalader, risque moyen) | `#854D0E` | `#FEFCE8` | `#FDE68A` | `#CA8A04` |
 | OK (légitime, risque faible) | `#067647` | `#ECFDF3` | `#ABEFC6` | `#17B26A` |
+
+> **Note de cohérence (dette connue) :** le voile de swipe (`DIRS.fraud`) et le
+> tableau de bord (`swipe_deck.py`) utilisent encore un **bleu** (`#1E40AF`) pour
+> « fraude / élevé », là où les cartes utilisent le rouge ci-dessus. C'est un reste
+> d'une ancienne direction, conservé volontairement pour l'instant. À aligner si on
+> veut une cohérence parfaite (passer ces bleus au rouge `#D92D20`).
 
 ---
 
@@ -78,63 +85,80 @@ Icônes **Lucide** en SVG inline (stroke `currentColor`, width 2). Jamais d'emoj
 | Signal avertissement | `alert-triangle` |
 | Signal ok | `check-circle` |
 | Carte bancaire (avatar) | `credit-card` |
+| Onglets | `inbox` (Révision) / `bar-chart` (Tableau de bord) |
 | Actions | `arrow-left` / `arrow-up` / `arrow-right` |
 
 ---
 
 ## Composant : Carte Dossier
 
-Surface blanche, `border-radius: 16px`, ombre douce en couches. Anatomie
-(haut → bas) :
+Rendue par `src/ui/cart_renderer_v2.py` (constante `CARD_CSS`, fonction
+`render_card_inner`). Surface blanche, `border-radius: 16px`, ombre douce.
+Anatomie (haut → bas) :
 
 1. **Header** — avatar (icône carte) + `Dossier #ID` + compteur + **pill de risque** (couleur selon score)
-2. **Métriques** — cartes « Carte » / « Montant » + **jauge de score** (barre colorée selon risque)
-3. **Analyse IA** — callout sobre (bordure gauche bleue) avec le verdict en langage naturel
+2. **Métriques** — « Carte » / « Montant » + **jauge de score** (barre colorée selon risque)
+3. **Analyse** — callout sobre avec le verdict en langage naturel (Gemini, ou repli)
 4. **Signaux détectés** — lignes `icône · label · valeur (mono) · badge` (couleur par sévérité)
-5. **Historique récent** — table des transactions précédentes, ligne courante surlignée (bleu)
+5. **Section basse adaptative** — change selon le **signal dominant** du dossier :
+   - `montant` → historique de dépense de la carte
+   - `poisson` → autres transactions sur le même terminal marchand (preuve du pic)
+   - `vitesse` → chronologie de la rafale (card-testing)
+   - `cross_card` → cartes liées au même marchand/appareil (réseau)
 
-Tokens : voir `src/ui/case_card.py` (constante `CARD_CSS`, fonction `render_card_inner`).
+---
+
+## Disposition du deck (écran de révision)
+
+Rendu par `src/ui/swipe_deck.py` (JS vanilla dans une iframe `components.html`).
+De haut en bas :
+
+1. **Barre d'onglets** rectangulaire : `Révision` / `Tableau de bord` (boutons larges avec icône).
+2. **Bannière d'apprentissage** (feedback) — verte (fiable) ou rouge (à risque), masquée par défaut.
+3. **Barre d'actions** — **au-dessus de la carte** (toujours visible, sans scroll) : boutons
+   Fraude / Escalader / Légitime + raccourcis + progression + bouton Annuler.
+4. **Pile de cartes** (carte active + 2 fantômes derrière).
 
 ---
 
 ## Interaction : file de révision swipable
 
-Implémentée dans `src/ui/swipe_deck.py` (JS vanilla dans une iframe `components.html`).
+| Geste | Clavier | Décision |
+|---|---|---|
+| Swipe gauche | `A` / `←` | Fraude |
+| Swipe haut | `E` / `↑` | Escalader |
+| Swipe droite | `D` / `→` | Légitime |
+| — | `Z` | Annuler la dernière décision |
 
-| Geste | Clavier | Décision | Couleur |
-|---|---|---|---|
-| Swipe gauche | `A` / `←` | Fraude | bleu `#1E40AF` |
-| Swipe haut | `E` / `↑` | Escalader | jaune `#CA8A04` |
-| Swipe droite | `D` / `→` | Légitime | vert `#17B26A` |
-| — | `Z` | Annuler la dernière décision | — |
-
-- **Pile** : 2 cartes fantômes décalées derrière la carte active.
-- **Drag** : `translate` + légère rotation ; un voile coloré + un label apparaissent selon la direction et l'intensité.
+- **Drag** : `translate` + légère rotation ; voile coloré + label selon direction/intensité.
 - **Seuil** : relâchée au-delà de 110 px → la carte s'envole ; sinon retour en place.
 - **Undo** : la carte revient depuis le côté de sa sortie.
-- **Fin de file** : écran récapitulatif (compteur par décision) + export CSV + recommencer.
+- **Fin de file** : récap par décision + **export JSON** (rapport d'audit) + recommencer.
+
+### Boucle de feedback (bidirectionnelle)
+- **2 « légitime »** d'une même catégorie → catégorie **fiable** → flags similaires restants **dépriorisés** (drapeau vert, carte atténuée).
+- **2 « fraude »** d'une même catégorie → catégorie **à risque confirmé** → flags similaires **remontés** (drapeau rouge).
+- Recalculée depuis l'état → cohérente avec l'undo. Bannière + ligne du dashboard se colorent en conséquence.
 
 ---
 
 ## Accessibilité
 
 - Contraste texte principal `#101828` sur `#FFFFFF` ≈ 16:1 (AAA).
-- Focus visible : `outline: 2px solid #1E40AF; outline-offset: 2px;`.
-- Toutes les actions sont accessibles au clavier (A/D/E/Z + flèches) **et** à la souris (boutons).
-- Le drag (pointer events) est une amélioration ; boutons + clavier restent le chemin principal.
-- Les valeurs longues tronquent en ellipse (jamais de débordement).
+- Toutes les actions au clavier (A/D/E/Z + flèches) **et** à la souris (boutons en haut).
+- Le drag est une amélioration ; boutons + clavier restent le chemin principal.
+- Valeurs longues tronquées en ellipse (jamais de débordement).
+- Sidebar `Réglages` ouverte par défaut (`initial_sidebar_state="expanded"`) ; on ne cache que `stToolbarActions` (pas tout le header) pour garder le bouton de réouverture.
 
 ---
 
 ## Stack technique
 
 - **Streamlit** + `st.components.v1.html` (iframe isolée) pour la carte/deck.
-- Tout le HTML/CSS/JS de la carte est **self-contained** dans l'iframe.
-- `streamlit-shortcuts` disponible si l'on doit remonter des raccourcis au niveau Streamlit (non requis pour le deck, qui gère son propre clavier).
-- Pas de framework JS, pas de build : JS vanilla.
+- Tout le HTML/CSS/JS de la carte est **self-contained** dans l'iframe. JS vanilla, pas de build.
 
 ### Anti-patterns techniques
-- Pas de `plotly` pour l'historique (HTML/CSS pur suffit).
+- Pas de `plotly` pour les historiques (HTML/CSS pur suffit).
 - Pas de composants Streamlit « lourds » qui imposeraient un autre langage visuel.
 
 ---
@@ -143,17 +167,19 @@ Implémentée dans `src/ui/swipe_deck.py` (JS vanilla dans une iframe `component
 
 - [ ] Inter + IBM Plex Mono chargées (fallback `sans-serif` / `monospace`)
 - [ ] Aucune icône emoji (Lucide SVG uniquement)
-- [ ] Palette respectée : bleu/jaune/vert, pas de rouge ni de violet
-- [ ] Focus visible au clavier
+- [ ] Palette des cartes respectée : rouge/jaune/vert par sévérité
+- [ ] Boutons d'action visibles **au-dessus** de la carte (pas de scroll pour agir)
 - [ ] Boutons ET clavier ET drag fonctionnent
 - [ ] Undo activé seulement s'il y a un historique
+- [ ] Feedback bidirectionnel visible (bannière verte/rouge)
 - [ ] Valeurs longues tronquées (pas de débordement)
 - [ ] État vide géré (file sans dossier)
-- [ ] Carte centrée et lisible de 1024 px à 1440 px
+- [ ] Sidebar ouverte par défaut et ré-ouvrable après fermeture
 
 ---
 
 ## Historique des directions
 
-- **v1–v2 (abandonnée)** : « paper detective » — chemise manille, tampons, post-it manuscrit, swipe Tinder ludique. Jugée trop *cartoon* / pas assez pro.
-- **v3+ (actuelle)** : refonte professionnelle (ce document). Le swipe est conservé mais en version sobre.
+- **v1–v2 (abandonnée)** : « paper detective » — chemise manille, tampons, post-it manuscrit. Jugée trop *cartoon*.
+- **v3 (pro)** : refonte sobre (Linear/Stripe). Palette initiale bleu/jaune/vert.
+- **v4 (actuelle)** : carte `cart_renderer_v2` avec section basse adaptative + palette **rouge**/jaune/vert ; onglets nav-bar ; barre d'actions en haut ; feedback bidirectionnel.

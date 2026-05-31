@@ -30,7 +30,7 @@
  controler.py            mappe chaque transaction signalée en CaseFile
         │  (+ explanations.py : verdicts Gemini, mis en cache)
         ▼
- ui/ (Streamlit)         swipe_deck.py / case_card.py — file de révision
+ ui/ (Streamlit)         swipe_deck.py / cart_renderer_v2.py — file de révision
         │                + tableau de bord + feedback loop + export
         ▼
  feedback.py / audit.py  modificateurs en session · audit_log.json
@@ -51,7 +51,10 @@
 | `src/controler.py` | Construit la file de `CaseFile` consommée par l'UI |
 | `src/feedback.py` | `FeedbackManager` : modificateurs catégorie/device en session |
 | `src/audit.py` | Audit log JSON (load / append / undo) |
-| `src/ui/*` | App Streamlit, deck swipable, carte, données mock, contrat d'interface |
+| `src/ui/app.py` | Page Streamlit : sidebar cost-aware, deck, import des décisions |
+| `src/ui/swipe_deck.py` | Deck swipable (JS vanilla) : onglets, barre d'actions en haut, dashboard, feedback |
+| `src/ui/cart_renderer_v2.py` | Rendu HTML/CSS d'une carte (section basse adaptative au signal dominant) |
+| `src/ui/mock_data.py` / `INTERFACE.md` | Dataclasses + données mock ; contrat UI ↔ backend |
 
 Le contrat UI ↔ backend est figé dans [`src/ui/INTERFACE.md`](src/ui/INTERFACE.md)
 (forme des `CaseFile` consommés, forme des décisions émises).
@@ -60,7 +63,7 @@ Le contrat UI ↔ backend est figé dans [`src/ui/INTERFACE.md`](src/ui/INTERFAC
 
 - **Règles statistiques, pas de ML** : 1 000 lignes sans labels → des règles transparentes qu'on peut défendre en démo valent mieux qu'une boîte noire.
 - **Score pondéré + seuil ajustable** plutôt que des seuils en dur : permet le cost-aware tuning.
-- **Boucle de feedback côté client** (dans le deck) pour un apprentissage en session visible et sans latence ; export JSON pour la persistance serveur.
+- **Boucle de feedback bidirectionnelle côté client** (dans le deck) : 2 « légitime » → catégorie fiable (dépriorise), 2 « fraude » → catégorie à risque (remonte). Visible, sans latence ; export JSON pour la persistance serveur.
 - **Pas de pont iframe→Python automatique** : on passe par un export/import JSON (robuste, zéro dépendance) plutôt qu'un composant bidirectionnel à builder.
 - **Cache disque des explications** pour ne pas re-payer l'API à chaque session.
 
